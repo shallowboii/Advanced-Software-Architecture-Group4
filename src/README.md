@@ -27,3 +27,8 @@ RabbitMQ
 ZeroMQ
 This is a messaging library, with no brokers. Essentially this is as bare bones as it gets, there is no persistancy. It connects with 
 
+
+Message bus: MQTT \
+Integration points: Between beer monitoring subsystem and production monitoring subsystem for real time heartbeat \
+Justification of MQTT: It is chosen for its efficiency and data exchange speed, optimal for quick processing and delivery of heartbeat from machines. \
+Justification QA: The usage of MQTT promotes efficiency by delivering small messages with low bandwidth.
