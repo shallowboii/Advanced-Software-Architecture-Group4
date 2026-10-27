@@ -43,8 +43,9 @@ int bf_parse_command(const char *json, const char *machine_id, uint64_t epoch, i
         else { out->has_expected_version = 1; out->expected_version = (uint64_t)n; }
     }
 #define N(field) bad |= number_field(root, #field, &out->field, 0) != 0
-    N(duration_h); N(hold_h); N(max_pause_h); N(permit_ms); N(sim_time_h); N(time_scale);
+    N(duration_h); N(hold_h); N(max_pause_h); N(flush_h); N(permit_ms); N(sim_time_h); N(time_scale);
 #undef N
+    out->has_flush_h = cJSON_HasObjectItem(root, "flush_h");
     cJSON *phases = cJSON_GetObjectItemCaseSensitive(root, "phases");
     if (phases) {
         if (!cJSON_IsArray(phases) || cJSON_GetArraySize(phases) > BF_PHASES) bad = 1;

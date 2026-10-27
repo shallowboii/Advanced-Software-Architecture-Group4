@@ -247,6 +247,9 @@ int main(void) {
             free(in.payload);
         }
         if (failed || bf_tick(&a.machine, clock_seconds(CLOCK_MONOTONIC), wall)) { failed = 1; break; }
+        if (MQTTAsync_isConnected(a.mqtt) && !atomic_load(&a.connected) && mono >= next_connect) {
+            subscribe_all(&a); next_connect = mono + 5;
+        }
         if (!MQTTAsync_isConnected(a.mqtt) && mono >= next_connect) {
             MQTTAsync_connectOptions opts = MQTTAsync_connectOptions_initializer;
             opts.keepAliveInterval = 5; opts.cleansession = 0; opts.automaticReconnect = 1;

@@ -1,6 +1,6 @@
 # Machine controller
 
-One `beer-machine` process controls one 50 hL machine. The executable selects `mash`, `lauter`, `kettle`, `whirlpool`, `unitank` or `filter` from `MACHINE_TYPE`. Recipe phases arrive in START or target PREPARE_TRANSFER; fermentation and maturation remain in the same uni-tank. No intermediate storage or cleaning state exists.
+One `beer-machine` process controls one 50 hL machine. The executable selects `mash`, `lauter`, `kettle`, `whirlpool`, `unitank` or `filter` from `MACHINE_TYPE`. Recipe phases and optional recipe `flush_h` arrive in START or target PREPARE_TRANSFER; fermentation and maturation remain in the same uni-tank. No intermediate storage or cleaning state exists.
 
 ## Build and run
 
@@ -44,7 +44,7 @@ machinectl --socket /tmp/custom-machine.sock snapshot
 
 STOP, RESUME and FLUSH enter the same durable handlers as network commands. Snapshot is a read-only health query and does not generate outbox traffic. Global physical STOP sets the local global latch immediately and emits STOPPED with `scope:global`; the coordinator persists the line latch and broadcasts STOP to all other machines. Reset a global line stop through the backend API so it also resets the coordinator latch. A global resume never clears a local operator stop.
 
-The CLI sends newline-delimited JSON and prints its JSON reply. Rejected commands exit nonzero. Flush requires the exact current batch ID, protecting a new batch from delayed operator requests. An accepted flush while stopped is pending until the operator resets STOP and a fresh coordinator permit arrives.
+The CLI sends newline-delimited JSON and prints its JSON reply. Rejected commands exit nonzero. Flush requires the exact current batch ID, protecting a new batch from delayed operator requests. A recipe can override `FLUSH_H` using its optional positive `flush_h`; missing overrides use the configured default, and the chosen batch duration survives restart. An accepted flush while stopped is pending until the operator resets STOP and a fresh coordinator permit arrives.
 
 ## Durability, timing and transfer ownership
 

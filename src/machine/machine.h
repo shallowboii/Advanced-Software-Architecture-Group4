@@ -36,15 +36,15 @@ typedef struct {
     char batch_id[BF_ID], execution_id[BF_ID], recipe_version_id[BF_ID], run_id[BF_ID];
     char transfer_id[BF_ID], role[BF_NAME], peer_id[BF_ID], scope[BF_NAME], reason[BF_ID], discard_reason[BF_ID];
     BFPhase phases[BF_PHASES];
-    int phase_count, local, has_expected_version;
+    int phase_count, local, has_expected_version, has_flush_h;
     uint64_t epoch, expected_version;
-    double duration_h, hold_h, max_pause_h, permit_ms, sim_time_h, time_scale;
+    double duration_h, hold_h, max_pause_h, permit_ms, sim_time_h, time_scale, flush_h;
 } BFCommand;
 
 typedef struct {
     sqlite3 *db;
     BFState s;
-    double last_mono, permit_until, last_checkpoint;
+    double last_mono, permit_until, last_checkpoint, default_flush_h;
     char error[256];
 } BFMachine;
 

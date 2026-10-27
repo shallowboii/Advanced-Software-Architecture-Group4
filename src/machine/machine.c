@@ -167,7 +167,7 @@ int bf_open(BFMachine *m, const char *path, const char *id, const char *type,
     copy(m->s.machine_id, sizeof m->s.machine_id, id); copy(m->s.type, sizeof m->s.type, type);
     copy(m->s.state, sizeof m->s.state, "EMPTY"); m->s.hold_deadline_h = -1;
     m->s.time_scale = scale; m->s.flush_h = flush_h; m->s.last_wall = wall;
-    m->last_mono = mono; m->last_checkpoint = mono;
+    m->last_mono = mono; m->last_checkpoint = mono; m->default_flush_h = flush_h;
     if (sqlite3_open(path, &m->db) != SQLITE_OK) { copy(m->error, sizeof m->error, sqlite3_errmsg(m->db)); return -1; }
     sqlite3_busy_timeout(m->db, 1000);
     if (sql(m, "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS machine_state(id INTEGER PRIMARY KEY CHECK(id=1),payload TEXT NOT NULL CHECK(json_valid(payload))); CREATE TABLE IF NOT EXISTS transfer_decisions(id TEXT PRIMARY KEY,decision TEXT NOT NULL); CREATE TABLE IF NOT EXISTS commands(id TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,result TEXT NOT NULL); CREATE TABLE IF NOT EXISTS outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT,event_id TEXT NOT NULL UNIQUE,payload TEXT NOT NULL);")) return -1;
@@ -227,6 +227,7 @@ static int record_transfer(BFMachine *m, const char *id, const char *decision) {
     return done(m, q);
 }
 static int valid_phases(const BFMachine *m, const BFCommand *c) {
+    if (c->has_flush_h && (!isfinite(c->flush_h) || c->flush_h <= 0)) return 0;
     if (c->phase_count < 1 || c->phase_count > BF_PHASES || !*c->batch_id || !*c->execution_id || !*c->recipe_version_id) return 0;
     if (!isfinite(c->hold_h) || c->hold_h < 0 || !isfinite(c->max_pause_h) || c->max_pause_h < 0) return 0;
     if (!strcmp(m->s.type, "unitank") && (c->phase_count != 2 || strcmp(c->phases[0].name, "fermentation") || strcmp(c->phases[1].name, "maturation"))) return 0;
@@ -234,7 +235,8 @@ static int valid_phases(const BFMachine *m, const BFCommand *c) {
         if (!*c->phases[i].name || !isfinite(c->phases[i].duration_h) || c->phases[i].duration_h <= 0 || !isfinite(c->phases[i].target_temp_c)) return 0;
     return 1;
 }
-static void assign(BFState *s, const BFCommand *c) {
+static void assign(BFMachine *m, const BFCommand *c) {
+    BFState *s = &m->s; s->flush_h = c->has_flush_h ? c->flush_h : m->default_flush_h;
     copy(s->batch_id, sizeof s->batch_id, c->batch_id); copy(s->execution_id, sizeof s->execution_id, c->execution_id);
     copy(s->recipe_version_id, sizeof s->recipe_version_id, c->recipe_version_id); copy(s->run_id, sizeof s->run_id, c->run_id);
     s->phase_count = c->phase_count; memcpy(s->phases, c->phases, sizeof s->phases);
@@ -260,7 +262,7 @@ static void fingerprint(const BFCommand *c, char *out, size_t cap) {
         put(&w, ",["); str(&w, c->phases[i].name);
         put(&w, ",%.17g,%.17g]", c->phases[i].duration_h, c->phases[i].target_temp_c);
     }
-    put(&w, "]");
+    put(&w, ",%d,%.17g]", c->has_flush_h, c->flush_h);
 }
 static int cache_result(BFMachine *m, const BFCommand *c, const char *fp, const char *response) {
     sqlite3_stmt *q; if (prepare(m, &q, "INSERT INTO commands(id,fingerprint,result) VALUES(?,?,?)")) return -1;
@@ -326,7 +328,7 @@ int bf_command(BFMachine *m, const BFCommand *c, double mono, double wall, char 
         if (!is_state(m, "EMPTY")) reason = "machine_not_empty";
         else if (!bf_permitted(m, mono)) reason = "machine_stopped";
         else if (!valid_phases(m, c)) reason = "invalid_stage_definition";
-        else { assign(&m->s, c); copy(m->s.state, sizeof m->s.state, "PROCESSING"); event = "STARTED"; }
+        else { assign(m, c); copy(m->s.state, sizeof m->s.state, "PROCESSING"); event = "STARTED"; }
     } else if (!strcmp(c->cmd, "PREPARE_TRANSFER")) {
         if (!*c->transfer_id || !*c->peer_id || !strcmp(c->peer_id, m->s.machine_id)) reason = "invalid_transfer";
         else if (transfer_decided(m, c->transfer_id)) reason = "transfer_already_decided";
@@ -337,7 +339,7 @@ int bf_command(BFMachine *m, const BFCommand *c, double mono, double wall, char 
         } else if (!strcmp(c->role, "target")) {
             if (!is_state(m, "EMPTY")) reason = "target_not_empty";
             else if (!valid_phases(m, c)) reason = "invalid_stage_definition";
-            else { assign(&m->s, c); copy(m->s.state, sizeof m->s.state, "RESERVED_IN"); }
+            else { assign(m, c); copy(m->s.state, sizeof m->s.state, "RESERVED_IN"); }
         } else reason = "invalid_transfer_role";
         if (!reason) {
             copy(m->s.transfer_id, sizeof m->s.transfer_id, c->transfer_id); copy(m->s.transfer_role, sizeof m->s.transfer_role, c->role);

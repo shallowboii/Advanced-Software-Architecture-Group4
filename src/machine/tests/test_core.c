@@ -202,9 +202,24 @@ static void repeated_flush_preserves_progress(void) {
     assert(count_event(&m, "FLUSH_REQUESTED") == 1); assert(count_event(&m, "FLUSHED") == 1);
     bf_close(&m);
 }
+static void recipe_flush_duration(void) {
+    char path[] = "/tmp/beer-machine-recipe-XXXXXX"; int fd = mkstemp(path); assert(fd >= 0); close(fd);
+    BFMachine m; assert(!bf_open(&m, path, "mash-0", "mash", 1, .2, now, 100000+now)); permit(&m);
+    BFCommand c = stage(&m, "START"); c.has_flush_h = 1; c.flush_h = 2; assert(!send(&m, &c));
+    assert(m.s.flush_h == 2); c.flush_h = 3; assert(send(&m, &c) == 1); assert(strstr(response, "command_id_conflict"));
+    bf_close(&m); assert(!bf_open(&m, path, "mash-0", "mash", 1, .4, now, 100000+now));
+    assert(m.s.flush_h == 2); now += .1; permit(&m);
+    c = command(&m, "FLUSH"); strcpy(c.batch_id, "batch-1"); assert(!send(&m, &c));
+    tick(&m, 1); assert(!strcmp(m.s.state, "FLUSHING")); tick(&m, 1); assert(!strcmp(m.s.state, "EMPTY"));
+    c = stage(&m, "START"); assert(!send(&m, &c)); assert(m.s.flush_h == .4);
+    bf_close(&m); unlink(path);
+    init(&m, "lauter", "lauter-0"); permit(&m);
+    c = stage(&m, "PREPARE_TRANSFER"); strcpy(c.transfer_id, "new-transfer"); strcpy(c.role, "target"); strcpy(c.peer_id, "mash-0");
+    c.has_flush_h = 1; c.flush_h = .75; assert(!send(&m, &c)); assert(m.s.flush_h == .75); bf_close(&m);
+}
 int main(void) {
     scopes_and_expiry(); duplicate_and_fencing(); spoil_while_stopped_and_flush();
-    unitank_and_filter(); transfer_and_discard_race(); abort_flush_inflight(); restart_and_ack(); aborted_reservation_tombstone(); transfer_stop_and_healthy_commit(); abort_unprepared_source(); repeated_flush_preserves_progress();
-    puts("PASS: 11 core scenarios (durability, replay, fencing, STOP, expiry, phases, transfers, discard races)");
+    unitank_and_filter(); transfer_and_discard_race(); abort_flush_inflight(); restart_and_ack(); aborted_reservation_tombstone(); transfer_stop_and_healthy_commit(); abort_unprepared_source(); repeated_flush_preserves_progress(); recipe_flush_duration();
+    puts("PASS: 12 core scenarios (durability, replay, fencing, STOP, expiry, phases, transfers, discard races)");
     return 0;
 }
