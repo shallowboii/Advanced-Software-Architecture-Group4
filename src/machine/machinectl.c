@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     int i = 1;
     if (i + 1 < argc && !strcmp(argv[i], "--socket")) { path = argv[i+1]; i += 2; }
     if (i >= argc) return usage();
-    if (!strcmp(argv[i], "snapshot")) cmd = "SNAPSHOT";
+    if (!strcmp(argv[i], "snapshot") || !strcmp(argv[i], "status")) cmd = "SNAPSHOT";
     else if (!strcmp(argv[i], "stop")) cmd = "STOP";
     else if (!strcmp(argv[i], "resume")) cmd = "RESUME";
     else if (!strcmp(argv[i], "flush")) cmd = "FLUSH";
