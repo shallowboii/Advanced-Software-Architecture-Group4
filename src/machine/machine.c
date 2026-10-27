@@ -380,6 +380,7 @@ int bf_command(BFMachine *m, const BFCommand *c, double mono, double wall, char 
         }
     } else if (!strcmp(c->cmd, "FLUSH")) {
         if (!*c->batch_id || strcmp(c->batch_id, m->s.batch_id)) reason = "batch_mismatch";
+        else if (m->s.flush_requested) event = "SNAPSHOT";
         else {
             m->s.flush_requested = 1; copy(m->s.reason, sizeof m->s.reason, *c->reason ? c->reason : "operator");
             if (!active_transfer(m)) copy(m->s.state, sizeof m->s.state, "FLUSH_PENDING");

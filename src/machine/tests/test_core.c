@@ -191,9 +191,20 @@ static void transfer_stop_and_healthy_commit(void) {
     assert(count_event(&a, "TRANSFER_COMMITTED") == 1); assert(count_event(&b, "TRANSFER_COMMITTED") == 1);
     bf_close(&a); bf_close(&b);
 }
+static void repeated_flush_preserves_progress(void) {
+    BFMachine m; init(&m, "mash", "mash-0"); start(&m); m.s.flush_h = 2;
+    BFCommand c = command(&m, "FLUSH"); strcpy(c.batch_id, "batch-1"); strcpy(c.reason, "operator");
+    assert(!send(&m, &c)); tick(&m, .8); assert(!strcmp(m.s.state, "FLUSHING"));
+    c = command(&m, "FLUSH"); strcpy(c.batch_id, "batch-1"); strcpy(c.reason, "different");
+    assert(!send(&m, &c)); assert(strstr(response, "\"event\":\"SNAPSHOT\""));
+    assert(fabs(m.s.flush_elapsed_h - .8) < 1e-6); assert(!strcmp(m.s.reason, "operator"));
+    tick(&m, 1.2); assert(!strcmp(m.s.state, "EMPTY"));
+    assert(count_event(&m, "FLUSH_REQUESTED") == 1); assert(count_event(&m, "FLUSHED") == 1);
+    bf_close(&m);
+}
 int main(void) {
     scopes_and_expiry(); duplicate_and_fencing(); spoil_while_stopped_and_flush();
-    unitank_and_filter(); transfer_and_discard_race(); abort_flush_inflight(); restart_and_ack(); aborted_reservation_tombstone(); transfer_stop_and_healthy_commit(); abort_unprepared_source();
-    puts("PASS: 10 core scenarios (durability, replay, fencing, STOP, expiry, phases, transfers, discard races)");
+    unitank_and_filter(); transfer_and_discard_race(); abort_flush_inflight(); restart_and_ack(); aborted_reservation_tombstone(); transfer_stop_and_healthy_commit(); abort_unprepared_source(); repeated_flush_preserves_progress();
+    puts("PASS: 11 core scenarios (durability, replay, fencing, STOP, expiry, phases, transfers, discard races)");
     return 0;
 }
