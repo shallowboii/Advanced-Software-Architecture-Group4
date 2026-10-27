@@ -58,6 +58,8 @@ int bf_tick(BFMachine *m, double mono, double wall);
 int bf_snapshot(const BFMachine *m, double mono, char *out, size_t cap);
 int bf_ack(BFMachine *m, const char *event_id);
 int bf_outbox(BFMachine *m, int limit, int (*send)(const char *, void *), void *ctx);
+int bf_outbox_new(BFMachine *m, uint64_t *after_sequence, int limit,
+                  int (*send)(const char *, void *), void *ctx);
 int bf_permitted(const BFMachine *m, double mono);
 int bf_valid_type(const char *type);
 void bf_uuid(char *out, size_t cap);

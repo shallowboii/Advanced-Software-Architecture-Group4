@@ -217,9 +217,29 @@ static void recipe_flush_duration(void) {
     c = stage(&m, "PREPARE_TRANSFER"); strcpy(c.transfer_id, "new-transfer"); strcpy(c.role, "target"); strcpy(c.peer_id, "mash-0");
     c.has_flush_h = 1; c.flush_h = .75; assert(!send(&m, &c)); assert(m.s.flush_h == .75); bf_close(&m);
 }
+typedef struct { int count, fail; char last[BF_JSON]; } Capture;
+static int capture(const char *payload, void *ctx) {
+    Capture *c = ctx; if (c->fail) return -1;
+    c->count++; snprintf(c->last, sizeof c->last, "%s", payload); return 0;
+}
+static void immediate_events_skip_unacked_backlog(void) {
+    BFMachine m; init(&m, "mash", "mash-0");
+    for (int i = 0; i < 70; i++) { BFCommand c = command(&m, "SNAPSHOT"); assert(!send(&m, &c)); }
+    uint64_t cursor = m.s.machine_sequence;
+    BFCommand c = command(&m, "STOP"); strcpy(c.scope, "global"); assert(!send(&m, &c));
+    Capture sink = {0}; sink.fail = 1;
+    assert(bf_outbox_new(&m, &cursor, 64, capture, &sink) == 0); assert(cursor == 70);
+    sink.fail = 0; assert(bf_outbox_new(&m, &cursor, 64, capture, &sink) == 1);
+    assert(cursor == 71); assert(sink.count == 1); assert(strstr(sink.last, "\"event\":\"STOPPED\""));
+    assert(count_event(&m, "STOPPED") == 1); /* first send is not an application ACK */
+    permit(&m); assert(m.s.machine_sequence == cursor);
+    assert(bf_outbox_new(&m, &cursor, 64, capture, &sink) == 0);
+    assert(bf_outbox(&m, 64, capture, &sink) == 64); /* old backlog still retries */
+    bf_close(&m);
+}
 int main(void) {
     scopes_and_expiry(); duplicate_and_fencing(); spoil_while_stopped_and_flush();
-    unitank_and_filter(); transfer_and_discard_race(); abort_flush_inflight(); restart_and_ack(); aborted_reservation_tombstone(); transfer_stop_and_healthy_commit(); abort_unprepared_source(); repeated_flush_preserves_progress(); recipe_flush_duration();
-    puts("PASS: 12 core scenarios (durability, replay, fencing, STOP, expiry, phases, transfers, discard races)");
+    unitank_and_filter(); transfer_and_discard_race(); abort_flush_inflight(); restart_and_ack(); aborted_reservation_tombstone(); transfer_stop_and_healthy_commit(); abort_unprepared_source(); repeated_flush_preserves_progress(); recipe_flush_duration(); immediate_events_skip_unacked_backlog();
+    puts("PASS: 13 core scenarios (durability, replay, fencing, STOP, expiry, phases, transfers, discard races)");
     return 0;
 }

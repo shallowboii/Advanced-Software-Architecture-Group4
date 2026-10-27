@@ -231,6 +231,7 @@ int main(void) {
     MQTTAsync_setCallbacks(a.mqtt, &a, connection_lost, arrived, NULL); MQTTAsync_setConnected(a.mqtt, &a, connected);
     a.kafka = kafka_open(env("KAFKA_BROKERS", "kafka:9092")); if (!a.kafka) return 2;
     double next_connect = 0, heartbeat_at = 0, telemetry_at = 0, replay_at = 0;
+    uint64_t published_sequence = a.machine.s.machine_sequence;
     double heartbeat_s = env_num("HEARTBEAT_MS", 2000) / 1000.;
     fprintf(stderr, "Controller %s type=%s ready; local socket=%s\n", id, type, sock);
     int failed = 0;
@@ -261,7 +262,13 @@ int main(void) {
             next_connect = mono + 5;
         }
         if (mono >= heartbeat_at) { char snapshot[BF_JSON]; if (!bf_snapshot(&a.machine, mono, snapshot, sizeof snapshot)) publish(&a, a.heartbeat_topic, snapshot, 0); heartbeat_at = mono + heartbeat_s; }
-        if (mono >= replay_at) { bf_outbox(&a.machine, 64, publish_event, &a); replay_at = mono + 0.5; }
+        if (atomic_load(&a.connected) && published_sequence < a.machine.s.machine_sequence) {
+            if (bf_outbox_new(&a.machine, &published_sequence, 64, publish_event, &a) < 0) { failed = 1; break; }
+        }
+        if (mono >= replay_at) {
+            if (bf_outbox(&a.machine, 64, publish_event, &a) < 0) { failed = 1; break; }
+            replay_at = mono + 0.5;
+        }
         if (mono >= telemetry_at) { telemetry(&a, wall); telemetry_at = mono + 1; }
         rd_kafka_poll(a.kafka, 0);
         struct timespec nap = {0, 10000000}; nanosleep(&nap, NULL);

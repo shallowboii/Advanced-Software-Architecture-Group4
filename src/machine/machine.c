@@ -493,3 +493,19 @@ int bf_outbox(BFMachine *m, int limit, int (*send)(const char *, void *), void *
     }
     sqlite3_finalize(q); return n;
 }
+
+/* First publication skips an old unacknowledged backlog. Every event remains
+   in the same durable outbox until ACK; bf_outbox still retries that backlog. */
+int bf_outbox_new(BFMachine *m, uint64_t *after_sequence, int limit,
+                  int (*send)(const char *, void *), void *ctx) {
+    sqlite3_stmt *q;
+    if (prepare(m, &q, "SELECT payload,json_extract(payload,'$.machine_sequence') FROM outbox WHERE json_extract(payload,'$.machine_sequence')>? ORDER BY json_extract(payload,'$.machine_sequence') LIMIT ?")) return -1;
+    sqlite3_bind_int64(q, 1, (sqlite3_int64)*after_sequence); sqlite3_bind_int(q, 2, limit);
+    int n = 0, rc;
+    while ((rc = sqlite3_step(q)) == SQLITE_ROW) {
+        if (send((const char *)sqlite3_column_text(q, 0), ctx)) break;
+        *after_sequence = (uint64_t)sqlite3_column_int64(q, 1); n++;
+    }
+    if (rc != SQLITE_DONE && rc != SQLITE_ROW) { copy(m->error, sizeof m->error, sqlite3_errmsg(m->db)); n = -1; }
+    sqlite3_finalize(q); return n;
+}
