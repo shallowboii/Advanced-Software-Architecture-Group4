@@ -1,0 +1,1652 @@
+{
+  "services": {
+    "postgres": {
+      "image": "postgres:17.6-bookworm",
+      "environment": {
+        "POSTGRES_DB": "beerfactory",
+        "POSTGRES_USER": "beerfactory",
+        "POSTGRES_PASSWORD": "development-only"
+      },
+      "volumes": [
+        "postgres-data:/var/lib/postgresql/data"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "pg_isready -U beerfactory -d beerfactory"
+        ],
+        "interval": "3s",
+        "timeout": "3s",
+        "retries": 30
+      },
+      "restart": "unless-stopped"
+    },
+    "redis": {
+      "image": "redis:7.4.5-alpine",
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "redis-cli",
+          "ping"
+        ],
+        "interval": "3s",
+        "timeout": "3s",
+        "retries": 30
+      },
+      "restart": "unless-stopped"
+    },
+    "rabbitmq": {
+      "image": "rabbitmq:4.1.4-management",
+      "environment": {
+        "RABBITMQ_DEFAULT_USER": "beerfactory",
+        "RABBITMQ_DEFAULT_PASS": "development-only"
+      },
+      "volumes": [
+        "rabbitmq-data:/var/lib/rabbitmq",
+        "./src/deploy/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "rabbitmq-diagnostics",
+          "-q",
+          "ping"
+        ],
+        "interval": "5s",
+        "timeout": "5s",
+        "retries": 30
+      },
+      "restart": "unless-stopped"
+    },
+    "kafka": {
+      "image": "apache/kafka:3.9.1",
+      "environment": {
+        "KAFKA_NODE_ID": "1",
+        "KAFKA_PROCESS_ROLES": "broker,controller",
+        "KAFKA_LISTENERS": "PLAINTEXT://:9092,CONTROLLER://:9093",
+        "KAFKA_ADVERTISED_LISTENERS": "PLAINTEXT://kafka:9092",
+        "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP": "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT",
+        "KAFKA_CONTROLLER_QUORUM_VOTERS": "1@kafka:9093",
+        "KAFKA_CONTROLLER_LISTENER_NAMES": "CONTROLLER",
+        "KAFKA_INTER_BROKER_LISTENER_NAME": "PLAINTEXT",
+        "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": "1",
+        "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": "1",
+        "KAFKA_TRANSACTION_STATE_LOG_MIN_ISR": "1",
+        "KAFKA_LOG_DIRS": "/var/lib/kafka/data",
+        "KAFKA_LOG_RETENTION_HOURS": "168",
+        "KAFKA_AUTO_CREATE_TOPICS_ENABLE": "true",
+        "KAFKA_HEAP_OPTS": "-Xms256m -Xmx512m",
+        "CLUSTER_ID": "MkU3OEVBNTcwNTJENDM2Qk"
+      },
+      "volumes": [
+        "kafka-data:/var/lib/kafka/data"
+      ],
+      "restart": "unless-stopped"
+    },
+    "inventory": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/inventory/Dockerfile"
+      },
+      "image": "beerfactory-inventory:local",
+      "environment": {
+        "PORT": "8081",
+        "INVENTORY_STATE_FILE": "/data/inventory.json",
+        "INITIAL_BATCHES": "1000"
+      },
+      "volumes": [
+        "inventory-data:/data"
+      ],
+      "restart": "unless-stopped"
+    },
+    "backend": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/backend/Dockerfile"
+      },
+      "image": "beerfactory-backend:local",
+      "environment": {
+        "DATABASE_URL": "jdbc:postgresql://postgres:5432/beerfactory",
+        "DATABASE_USER": "beerfactory",
+        "DATABASE_PASSWORD": "development-only",
+        "REDIS_HOST": "redis",
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "INVENTORY_URL": "http://inventory:8081",
+        "TIME_SCALE": "2",
+        "POLICY": "CONWIP",
+        "RUN_ID": "interactive",
+        "RECIPE_FILE": "/app/config/recipes.json",
+        "WIP_LIMIT": "40"
+      },
+      "volumes": [
+        "./src/config/recipes.json:/app/config/recipes.json:ro"
+      ],
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy"
+        },
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "redis": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        },
+        "inventory": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "frontend": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/frontend/Dockerfile"
+      },
+      "image": "beerfactory-frontend:local",
+      "ports": [
+        "${FACTORY_PORT:-8088}:80"
+      ],
+      "depends_on": [
+        "backend"
+      ],
+      "restart": "unless-stopped"
+    },
+    "mash-0": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "mash-0",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "mash",
+        "MACHINE_ID": "mash-0",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "mash-0-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "lauter-0": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "lauter-0",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "lauter",
+        "MACHINE_ID": "lauter-0",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "lauter-0-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "kettle-0": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "kettle-0",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "kettle",
+        "MACHINE_ID": "kettle-0",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "kettle-0-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "whirlpool-0": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "whirlpool-0",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "whirlpool",
+        "MACHINE_ID": "whirlpool-0",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "whirlpool-0-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-0": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-0",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-0",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-0-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-1": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-1",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-1",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-1-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-2": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-2",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-2",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-2-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-3": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-3",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-3",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-3-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-4": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-4",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-4",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-4-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-5": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-5",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-5",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-5-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-6": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-6",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-6",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-6-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-7": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-7",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-7",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-7-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-8": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-8",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-8",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-8-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-9": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-9",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-9",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-9-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-10": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-10",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-10",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-10-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-11": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-11",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-11",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-11-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-12": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-12",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-12",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-12-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-13": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-13",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-13",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-13-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-14": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-14",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-14",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-14-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-15": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-15",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-15",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-15-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-16": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-16",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-16",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-16-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-17": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-17",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-17",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-17-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-18": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-18",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-18",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-18-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-19": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-19",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-19",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-19-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-20": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-20",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-20",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-20-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-21": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-21",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-21",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-21-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-22": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-22",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-22",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-22-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-23": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-23",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-23",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-23-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-24": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-24",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-24",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-24-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-25": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-25",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-25",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-25-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-26": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-26",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-26",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-26-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-27": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-27",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-27",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-27-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-28": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-28",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-28",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-28-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-29": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-29",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-29",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-29-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-30": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-30",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-30",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-30-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-31": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-31",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-31",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-31-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-32": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-32",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-32",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-32-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-33": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-33",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-33",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-33-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-34": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-34",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-34",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-34-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-35": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-35",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-35",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-35-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-36": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-36",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-36",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-36-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-37": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-37",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-37",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-37-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-38": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-38",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-38",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-38-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "unitank-39": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "unitank-39",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "unitank",
+        "MACHINE_ID": "unitank-39",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "unitank-39-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    },
+    "filter-0": {
+      "build": {
+        "context": ".",
+        "dockerfile": "src/machine/Dockerfile"
+      },
+      "image": "beerfactory-machine:local",
+      "hostname": "filter-0",
+      "environment": {
+        "MQTT_URL": "tcp://rabbitmq:1883",
+        "MQTT_USERNAME": "beerfactory",
+        "MQTT_PASSWORD": "development-only",
+        "KAFKA_BROKERS": "kafka:9092",
+        "TIME_SCALE": "2",
+        "MACHINE_TYPE": "filter",
+        "MACHINE_ID": "filter-0",
+        "STATE_DB": "/data/machine.db",
+        "SOCKET_PATH": "/tmp/machine.sock",
+        "FLUSH_H": "0.1"
+      },
+      "volumes": [
+        "filter-0-data:/data"
+      ],
+      "depends_on": {
+        "rabbitmq": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "unless-stopped"
+    }
+  },
+  "volumes": {
+    "postgres-data": {},
+    "rabbitmq-data": {},
+    "kafka-data": {},
+    "inventory-data": {},
+    "mash-0-data": {},
+    "lauter-0-data": {},
+    "kettle-0-data": {},
+    "whirlpool-0-data": {},
+    "unitank-0-data": {},
+    "unitank-1-data": {},
+    "unitank-2-data": {},
+    "unitank-3-data": {},
+    "unitank-4-data": {},
+    "unitank-5-data": {},
+    "unitank-6-data": {},
+    "unitank-7-data": {},
+    "unitank-8-data": {},
+    "unitank-9-data": {},
+    "unitank-10-data": {},
+    "unitank-11-data": {},
+    "unitank-12-data": {},
+    "unitank-13-data": {},
+    "unitank-14-data": {},
+    "unitank-15-data": {},
+    "unitank-16-data": {},
+    "unitank-17-data": {},
+    "unitank-18-data": {},
+    "unitank-19-data": {},
+    "unitank-20-data": {},
+    "unitank-21-data": {},
+    "unitank-22-data": {},
+    "unitank-23-data": {},
+    "unitank-24-data": {},
+    "unitank-25-data": {},
+    "unitank-26-data": {},
+    "unitank-27-data": {},
+    "unitank-28-data": {},
+    "unitank-29-data": {},
+    "unitank-30-data": {},
+    "unitank-31-data": {},
+    "unitank-32-data": {},
+    "unitank-33-data": {},
+    "unitank-34-data": {},
+    "unitank-35-data": {},
+    "unitank-36-data": {},
+    "unitank-37-data": {},
+    "unitank-38-data": {},
+    "unitank-39-data": {},
+    "filter-0-data": {}
+  }
+}

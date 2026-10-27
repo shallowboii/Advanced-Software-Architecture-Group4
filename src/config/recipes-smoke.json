@@ -1,0 +1,190 @@
+{
+  "recipes": [
+    {
+      "id": "ale",
+      "name": "Ale",
+      "version": 1,
+      "volume_hl": 50,
+      "ingredients": {
+        "malt_kg": 900,
+        "hops_kg": 20,
+        "yeast_kg": 10,
+        "water_l": 6000
+      },
+      "stages": [
+        {
+          "type": "mash",
+          "phases": [
+            {
+              "name": "mash",
+              "duration_h": 1,
+              "target_temp_c": 65
+            }
+          ],
+          "hold_h": 10,
+          "max_pause_h": 10
+        },
+        {
+          "type": "lauter",
+          "phases": [
+            {
+              "name": "lauter",
+              "duration_h": 1,
+              "target_temp_c": 76
+            }
+          ],
+          "hold_h": 10,
+          "max_pause_h": 10
+        },
+        {
+          "type": "kettle",
+          "phases": [
+            {
+              "name": "kettle",
+              "duration_h": 1,
+              "target_temp_c": 100
+            }
+          ],
+          "hold_h": 10,
+          "max_pause_h": 10
+        },
+        {
+          "type": "whirlpool",
+          "phases": [
+            {
+              "name": "whirlpool",
+              "duration_h": 1,
+              "target_temp_c": 20
+            }
+          ],
+          "hold_h": 10,
+          "max_pause_h": 10
+        },
+        {
+          "type": "unitank",
+          "phases": [
+            {
+              "name": "fermentation",
+              "duration_h": 1,
+              "target_temp_c": 20
+            },
+            {
+              "name": "maturation",
+              "duration_h": 1,
+              "target_temp_c": 2
+            }
+          ],
+          "hold_h": 168,
+          "max_pause_h": 168
+        },
+        {
+          "type": "filter",
+          "phases": [
+            {
+              "name": "filter",
+              "duration_h": 1,
+              "target_temp_c": 3
+            }
+          ],
+          "hold_h": null,
+          "max_pause_h": 10
+        }
+      ],
+      "transfer_h": 0.1,
+      "flush_h": 0.1
+    },
+    {
+      "id": "lager",
+      "name": "Lager",
+      "version": 1,
+      "volume_hl": 50,
+      "ingredients": {
+        "malt_kg": 900,
+        "hops_kg": 20,
+        "yeast_kg": 10,
+        "water_l": 6000
+      },
+      "stages": [
+        {
+          "type": "mash",
+          "phases": [
+            {
+              "name": "mash",
+              "duration_h": 1,
+              "target_temp_c": 65
+            }
+          ],
+          "hold_h": 10,
+          "max_pause_h": 10
+        },
+        {
+          "type": "lauter",
+          "phases": [
+            {
+              "name": "lauter",
+              "duration_h": 1,
+              "target_temp_c": 76
+            }
+          ],
+          "hold_h": 10,
+          "max_pause_h": 10
+        },
+        {
+          "type": "kettle",
+          "phases": [
+            {
+              "name": "kettle",
+              "duration_h": 1,
+              "target_temp_c": 100
+            }
+          ],
+          "hold_h": 10,
+          "max_pause_h": 10
+        },
+        {
+          "type": "whirlpool",
+          "phases": [
+            {
+              "name": "whirlpool",
+              "duration_h": 1,
+              "target_temp_c": 20
+            }
+          ],
+          "hold_h": 10,
+          "max_pause_h": 10
+        },
+        {
+          "type": "unitank",
+          "phases": [
+            {
+              "name": "fermentation",
+              "duration_h": 1,
+              "target_temp_c": 12
+            },
+            {
+              "name": "maturation",
+              "duration_h": 1,
+              "target_temp_c": 2
+            }
+          ],
+          "hold_h": 168,
+          "max_pause_h": 168
+        },
+        {
+          "type": "filter",
+          "phases": [
+            {
+              "name": "filter",
+              "duration_h": 1,
+              "target_temp_c": 3
+            }
+          ],
+          "hold_h": null,
+          "max_pause_h": 10
+        }
+      ],
+      "transfer_h": 0.1,
+      "flush_h": 0.1
+    }
+  ]
+}

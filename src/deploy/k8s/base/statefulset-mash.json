@@ -1,0 +1,119 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "StatefulSet",
+  "metadata": {
+    "name": "mash"
+  },
+  "spec": {
+    "serviceName": "mash",
+    "replicas": 1,
+    "podManagementPolicy": "Parallel",
+    "updateStrategy": {
+      "type": "OnDelete"
+    },
+    "selector": {
+      "matchLabels": {
+        "app": "machine",
+        "machine-type": "mash"
+      }
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "machine",
+          "machine-type": "mash"
+        }
+      },
+      "spec": {
+        "terminationGracePeriodSeconds": 30,
+        "securityContext": {
+          "fsGroup": 10001
+        },
+        "containers": [
+          {
+            "name": "machine",
+            "image": "beerfactory-machine:dev",
+            "env": [
+              {
+                "name": "MACHINE_ID",
+                "valueFrom": {
+                  "fieldRef": {
+                    "fieldPath": "metadata.name"
+                  }
+                }
+              },
+              {
+                "name": "MACHINE_TYPE",
+                "value": "mash"
+              },
+              {
+                "name": "MQTT_URL",
+                "value": "tcp://rabbitmq:1883"
+              },
+              {
+                "name": "MQTT_USERNAME",
+                "value": "beerfactory"
+              },
+              {
+                "name": "MQTT_PASSWORD",
+                "value": "development-only"
+              },
+              {
+                "name": "KAFKA_BROKERS",
+                "value": "kafka:9092"
+              },
+              {
+                "name": "TIME_SCALE",
+                "value": "2"
+              },
+              {
+                "name": "STATE_DB",
+                "value": "/data/machine.db"
+              },
+              {
+                "name": "SOCKET_PATH",
+                "value": "/tmp/machine.sock"
+              },
+              {
+                "name": "FLUSH_H",
+                "value": "0.1"
+              }
+            ],
+            "volumeMounts": [
+              {
+                "name": "data",
+                "mountPath": "/data"
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "10m",
+                "memory": "24Mi"
+              },
+              "limits": {
+                "memory": "128Mi"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "volumeClaimTemplates": [
+      {
+        "metadata": {
+          "name": "data"
+        },
+        "spec": {
+          "accessModes": [
+            "ReadWriteOnce"
+          ],
+          "resources": {
+            "requests": {
+              "storage": "128Mi"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

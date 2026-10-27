@@ -1,0 +1,32 @@
+@startuml
+hide empty description
+state "Clock" as Clock {
+  state Clock_Running
+  [*] --> Clock_Running
+  Clock_Running --> Clock_Running : x == 1 / tick! / x = 0
+}
+state "Operator" as Operator {
+  state Operator_BeforeStop
+  state Operator_Stopped
+  state Operator_Resumed
+  [*] --> Operator_BeforeStop
+  Operator_BeforeStop --> Operator_Stopped : x == 1 / stopped = true
+  Operator_Stopped --> Operator_Resumed : x == 3 / stopped = false
+}
+state "Batch" as Batch {
+  state Batch_Ready
+  state Batch_Transfer
+  state Batch_Receiving
+  state Batch_Completed
+  state Batch_Spoiled
+  [*] --> Batch_Ready
+  Batch_Ready --> Batch_Ready : tick? / age = age < 100 ? age + 1 : age
+  Batch_Ready --> Batch_Transfer : !stopped && age < HOLD && ((!SAFE && reservations < 2) || reservations == 0) / reservations++, progress = 0
+  Batch_Ready --> Batch_Spoiled : age >= HOLD
+  Batch_Transfer --> Batch_Transfer : tick? / age = age < 100 ? age + 1 : age, progress = (!stopped && progress < 3) ? progress + 1 : progress
+  Batch_Transfer --> Batch_Receiving : !stopped && progress >= 2 && age < HOLD / destination_owners++, progress = 0
+  Batch_Transfer --> Batch_Spoiled : age >= HOLD / reservations--
+  Batch_Receiving --> Batch_Receiving : tick? / progress = (!stopped && progress < 3) ? progress + 1 : progress
+  Batch_Receiving --> Batch_Completed : !stopped && progress >= 2 / destination_owners--, reservations--
+}
+@enduml

@@ -1,0 +1,31 @@
+{
+  "recorded_at": "2026-10-27T16:16:14.180872+00:00",
+  "tool": "/opt/homebrew/bin/verifyta",
+  "verified": false,
+  "variants": {
+    "naive": {
+      "exit_code": 1,
+      "answers": [],
+      "expected": [
+        false,
+        false,
+        true,
+        true,
+        true
+      ],
+      "matched": false
+    },
+    "reserved": {
+      "exit_code": 1,
+      "answers": [],
+      "expected": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "matched": false
+    }
+  }
+}

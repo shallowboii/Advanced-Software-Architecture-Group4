@@ -1,0 +1,94 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "StatefulSet",
+  "metadata": {
+    "name": "inventory"
+  },
+  "spec": {
+    "replicas": 1,
+    "selector": {
+      "matchLabels": {
+        "app": "inventory"
+      }
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "inventory"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "inventory",
+            "image": "beerfactory-inventory:dev",
+            "ports": [
+              {
+                "containerPort": 8081
+              }
+            ],
+            "env": [
+              {
+                "name": "PORT",
+                "value": "8081"
+              },
+              {
+                "name": "INVENTORY_STATE_FILE",
+                "value": "/data/inventory.json"
+              },
+              {
+                "name": "INITIAL_BATCHES",
+                "value": "1000"
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              },
+              "limits": {
+                "memory": "1Gi"
+              }
+            },
+            "readinessProbe": {
+              "tcpSocket": {
+                "port": 8081
+              },
+              "initialDelaySeconds": 5,
+              "periodSeconds": 5
+            },
+            "volumeMounts": [
+              {
+                "name": "data",
+                "mountPath": "/data"
+              }
+            ]
+          }
+        ],
+        "volumes": [],
+        "terminationGracePeriodSeconds": 30,
+        "securityContext": {
+          "fsGroup": 10001
+        }
+      }
+    },
+    "serviceName": "inventory",
+    "volumeClaimTemplates": [
+      {
+        "metadata": {
+          "name": "data"
+        },
+        "spec": {
+          "accessModes": [
+            "ReadWriteOnce"
+          ],
+          "resources": {
+            "requests": {
+              "storage": "2Gi"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "cmd",
+    "command_id",
+    "epoch"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "machine_id": {
+      "type": "string",
+      "pattern": "^(mash|lauter|kettle|whirlpool|unitank|filter)-[0-9]+$"
+    },
+    "batch_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sim_time_h": {
+      "type": "number",
+      "minimum": 0
+    },
+    "cmd": {
+      "enum": [
+        "PERMIT",
+        "START",
+        "PREPARE_TRANSFER",
+        "EXECUTE_TRANSFER",
+        "COMMIT_TRANSFER",
+        "ABORT_TRANSFER",
+        "STOP",
+        "RESUME",
+        "FLUSH",
+        "SNAPSHOT"
+      ]
+    },
+    "command_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "epoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "flush_h": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "discard_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "scope": {
+      "enum": [
+        "local",
+        "global"
+      ]
+    }
+  },
+  "title": "Beer Factory command",
+  "anyOf": [
+    {
+      "required": [
+        "machine_id"
+      ]
+    },
+    {
+      "required": [
+        "scope"
+      ],
+      "properties": {
+        "scope": {
+          "const": "global"
+        },
+        "cmd": {
+          "enum": [
+            "STOP",
+            "RESUME"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -2,6 +2,8 @@
 
 This checklist audits the Beer Factory implementation plan against the available ASAAT materials checked on 27 October 2026. It distinguishes mandatory course requirements from the group's earlier proposed system requirements. A planned task is not completed evidence.
 
+The implementation and actual checks now have a separate [validation status](validation-status.md). The planning tables below retain the original acceptance requirements; use that status document to distinguish implemented code, verified checks and outstanding course evidence.
+
 The original prototype plan covered the software stack and Exercises 6 and 7.1, but did not cover the full course. Missing work included formal modelling and transformation, traceability, continuous deployment and availability evidence, architectural comparison, the complete report and final submission artifacts. These are now assigned in [the implementation plan](../IMPLEMENTATION_PLAN.md).
 
 ## 1 Primary source documents

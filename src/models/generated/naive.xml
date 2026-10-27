@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<nta>
+  <declaration>const bool SAFE = false;
+const int HOLD = 10;
+int[0,2] reservations = 0;
+int[0,2] destination_owners = 0;
+bool stopped = false;
+bool progressed_while_stopped = false;
+broadcast chan tick;
+</declaration>
+  <template>
+    <name>Clock</name>
+    <declaration>clock x;</declaration>
+    <location id="Clock_Running" x="0" y="0">
+      <name>Running</name>
+      <label kind="invariant">x &lt;= 1</label>
+    </location>
+    <init ref="Clock_Running" />
+    <transition>
+      <source ref="Clock_Running" />
+      <target ref="Clock_Running" />
+      <label kind="guard">x == 1</label>
+      <label kind="synchronisation">tick!</label>
+      <label kind="assignment">x = 0</label>
+    </transition>
+  </template>
+  <template>
+    <name>Operator</name>
+    <declaration>clock x;</declaration>
+    <location id="Operator_BeforeStop" x="0" y="0">
+      <name>BeforeStop</name>
+      <label kind="invariant">x &lt;= 1</label>
+    </location>
+    <location id="Operator_Stopped" x="180" y="0">
+      <name>Stopped</name>
+      <label kind="invariant">x &lt;= 3</label>
+    </location>
+    <location id="Operator_Resumed" x="360" y="0">
+      <name>Resumed</name>
+    </location>
+    <init ref="Operator_BeforeStop" />
+    <transition>
+      <source ref="Operator_BeforeStop" />
+      <target ref="Operator_Stopped" />
+      <label kind="guard">x == 1</label>
+      <label kind="assignment">stopped = true</label>
+    </transition>
+    <transition>
+      <source ref="Operator_Stopped" />
+      <target ref="Operator_Resumed" />
+      <label kind="guard">x == 3</label>
+      <label kind="assignment">stopped = false</label>
+    </transition>
+  </template>
+  <template>
+    <name>Batch</name>
+    <parameter>const int id</parameter>
+    <declaration>int[0,100] age = 0;
+int[0,3] progress = 0;</declaration>
+    <location id="Batch_Ready" x="0" y="0">
+      <name>Ready</name>
+    </location>
+    <location id="Batch_Transfer" x="180" y="0">
+      <name>Transfer</name>
+    </location>
+    <location id="Batch_Receiving" x="360" y="0">
+      <name>Receiving</name>
+    </location>
+    <location id="Batch_Completed" x="540" y="0">
+      <name>Completed</name>
+    </location>
+    <location id="Batch_Spoiled" x="720" y="0">
+      <name>Spoiled</name>
+    </location>
+    <init ref="Batch_Ready" />
+    <transition>
+      <source ref="Batch_Ready" />
+      <target ref="Batch_Ready" />
+      <label kind="synchronisation">tick?</label>
+      <label kind="assignment">age = age &lt; 100 ? age + 1 : age</label>
+    </transition>
+    <transition>
+      <source ref="Batch_Ready" />
+      <target ref="Batch_Transfer" />
+      <label kind="guard">!stopped &amp;&amp; age &lt; HOLD &amp;&amp; ((!SAFE &amp;&amp; reservations &lt; 2) || reservations == 0)</label>
+      <label kind="assignment">reservations++, progress = 0</label>
+    </transition>
+    <transition>
+      <source ref="Batch_Ready" />
+      <target ref="Batch_Spoiled" />
+      <label kind="guard">age &gt;= HOLD</label>
+    </transition>
+    <transition>
+      <source ref="Batch_Transfer" />
+      <target ref="Batch_Transfer" />
+      <label kind="synchronisation">tick?</label>
+      <label kind="assignment">age = age &lt; 100 ? age + 1 : age, progress = (!stopped &amp;&amp; progress &lt; 3) ? progress + 1 : progress</label>
+    </transition>
+    <transition>
+      <source ref="Batch_Transfer" />
+      <target ref="Batch_Receiving" />
+      <label kind="guard">!stopped &amp;&amp; progress &gt;= 2 &amp;&amp; age &lt; HOLD</label>
+      <label kind="assignment">destination_owners++, progress = 0</label>
+    </transition>
+    <transition>
+      <source ref="Batch_Transfer" />
+      <target ref="Batch_Spoiled" />
+      <label kind="guard">age &gt;= HOLD</label>
+      <label kind="assignment">reservations--</label>
+    </transition>
+    <transition>
+      <source ref="Batch_Receiving" />
+      <target ref="Batch_Receiving" />
+      <label kind="synchronisation">tick?</label>
+      <label kind="assignment">progress = (!stopped &amp;&amp; progress &lt; 3) ? progress + 1 : progress</label>
+    </transition>
+    <transition>
+      <source ref="Batch_Receiving" />
+      <target ref="Batch_Completed" />
+      <label kind="guard">!stopped &amp;&amp; progress &gt;= 2</label>
+      <label kind="assignment">destination_owners--, reservations--</label>
+    </transition>
+  </template>
+  <system>clock_process = Clock();
+operator_process = Operator();
+batch0 = Batch(0);
+batch1 = Batch(1);
+system clock_process, operator_process, batch0, batch1;</system>
+  <queries>
+    <query>
+      <formula>A[] reservations &lt;= 1</formula>
+      <comment>TRANSFER-1: The downstream machine is never reserved for two batches</comment>
+    </query>
+    <query>
+      <formula>A[] destination_owners &lt;= 1</formula>
+      <comment>TRANSFER-2: At most one batch occupies the downstream machine</comment>
+    </query>
+    <query>
+      <formula>A[] not deadlock</formula>
+      <comment>LIVE-1: The timed model has no deadlock</comment>
+    </query>
+    <query>
+      <formula>E&lt;&gt; batch0.Completed</formula>
+      <comment>SANITY-1: A batch can complete; reservation safety is not vacuous</comment>
+    </query>
+    <query>
+      <formula>E&lt;&gt; operator_process.Stopped</formula>
+      <comment>SANITY-2: The STOP scenario is reachable</comment>
+    </query>
+  </queries>
+</nta>
