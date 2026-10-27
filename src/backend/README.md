@@ -12,6 +12,8 @@ Global STOP persists a latch, broadcasts non-retained STOP and sends tracked com
 
 Environment variables follow the shared contract. `TIME_SCALE` is real seconds per simulated hour. The PostgreSQL simulation clock survives restart; changing policy/run does not reset it. Experiment status reports absolute `sim_clock_h`, `start_sim_h` and relative `elapsed_h`. `/events` exports insertion order using `recorded_seq`; use `after=<sequence>&limit=1000` or stable append-only `offset` pages. Both `/events` and `/telemetry` accept `order=desc` for recent dashboard views; the default is `asc`. Telemetry supports timestamp, machine, batch, run and sensor filters. HTTP mutations accept `Idempotency-Key`; reuse with different input returns 409. `/api/health` checks initialisation and live database access.
 
+Redis uses `REDIS_HOST` and numeric `FACTORY_REDIS_PORT` (default `6379`). Do not use `REDIS_PORT`: Kubernetes may inject it as a `tcp://...` service URL. Backend Pods disable service-link environment injection and use explicit DNS endpoints.
+
 Validation:
 
 - `src/backend/tools/check-core.sh` runs exhaustive admission, ownership, terminal and transfer safety guards with only Java 21.

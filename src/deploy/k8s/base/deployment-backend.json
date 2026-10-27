@@ -45,6 +45,10 @@
                 "value": "redis"
               },
               {
+                "name": "FACTORY_REDIS_PORT",
+                "value": "6379"
+              },
+              {
                 "name": "MQTT_URL",
                 "value": "tcp://rabbitmq:1883"
               },
@@ -119,7 +123,8 @@
             }
           }
         ],
-        "terminationGracePeriodSeconds": 30
+        "terminationGracePeriodSeconds": 30,
+        "enableServiceLinks": false
       }
     },
     "strategy": {

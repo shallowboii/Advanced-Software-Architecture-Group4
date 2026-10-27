@@ -110,6 +110,7 @@
         "DATABASE_USER": "beerfactory",
         "DATABASE_PASSWORD": "development-only",
         "REDIS_HOST": "redis",
+        "FACTORY_REDIS_PORT": "6379",
         "MQTT_URL": "tcp://rabbitmq:1883",
         "MQTT_USERNAME": "beerfactory",
         "MQTT_PASSWORD": "development-only",

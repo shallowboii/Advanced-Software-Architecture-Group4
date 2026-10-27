@@ -43,7 +43,7 @@ Backend port 8080, inventory port 8081, frontend container port 80 (host 8088). 
 
 Inventory: `GET /health`, `GET /stock` -> `{stock:{malt_kg,hops_kg,yeast_kg,water_l}}`; `POST /reserve` body `{batch_id, ingredients:{malt_kg,hops_kg,yeast_kg,water_l}}` -> `{batch_id,status:"reserved",stock}`; insufficient stock returns 409 with `error:"insufficient_stock"`. Existing key with identical quantities returns the previous reservation without deducting again; conflicting quantities return 409. `GET /reservations/{batch_id}`; `POST /reservations/{batch_id}/release` releases once before admission cancellation. `POST /restock` accepts `{request_id, ingredients:{...}}`, idempotently. Validate finite, nonnegative numeric values, reject booleans/unknown fields, persist stock and reservation state atomically. Storage path `INVENTORY_STATE_FILE`, seed `INITIAL_BATCHES` default 100. Service serialises mutations.
 
-Backend reads recipes from `RECIPE_FILE` (default `/app/config/recipes.json`), env `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`, `REDIS_HOST`, `MQTT_URL`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `KAFKA_BROKERS`, `INVENTORY_URL`, `TIME_SCALE`, `POLICY`, `WIP_LIMIT`, `RUN_ID`.
+Backend reads recipes from `RECIPE_FILE` (default `/app/config/recipes.json`), env `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`, `REDIS_HOST`, `FACTORY_REDIS_PORT` (numeric, default 6379), `MQTT_URL`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `KAFKA_BROKERS`, `INVENTORY_URL`, `TIME_SCALE`, `POLICY`, `WIP_LIMIT`, `RUN_ID`.
 
 Inventory release of an unknown batch persists a released tombstone. A delayed reservation for that ID must fail without deducting stock; otherwise cancellation could leak ingredients when reserve and release race.
 

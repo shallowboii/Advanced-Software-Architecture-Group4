@@ -10,7 +10,7 @@ IMAGES = {'postgres': 'postgres:17.6-bookworm', 'redis': 'redis:7.4.5-alpine',
           'rabbitmq': 'rabbitmq:4.1.4-management', 'kafka': 'apache/kafka:3.9.1'}
 ENV = {'DATABASE_URL': 'jdbc:postgresql://postgres:5432/beerfactory',
        'DATABASE_USER': 'beerfactory', 'DATABASE_PASSWORD': 'development-only',
-       'REDIS_HOST': 'redis', 'MQTT_URL': 'tcp://rabbitmq:1883',
+       'REDIS_HOST': 'redis', 'FACTORY_REDIS_PORT': '6379', 'MQTT_URL': 'tcp://rabbitmq:1883',
        'MQTT_USERNAME': 'beerfactory', 'MQTT_PASSWORD': 'development-only',
        'KAFKA_BROKERS': 'kafka:9092', 'INVENTORY_URL': 'http://inventory:8081',
        'TIME_SCALE': '2', 'POLICY': 'CONWIP', 'RUN_ID': 'interactive',
@@ -122,6 +122,9 @@ def kube(tanks):
         if mounts:
             container['volumeMounts'] = mounts
         template = {'metadata': {'labels': {'app': name}}, 'spec': {'containers': [container], 'volumes': volumes, 'terminationGracePeriodSeconds': 30}}
+        if name == 'backend':
+            # Service-link variables such as REDIS_PORT are URLs, not port numbers.
+            template['spec']['enableServiceLinks'] = False
         if name in ['inventory', 'kafka', 'rabbitmq']:
             template['spec']['securityContext'] = {'fsGroup': {'inventory': 10001, 'kafka': 1000, 'rabbitmq': 999}[name]}
         if name == 'kafka':
