@@ -118,10 +118,35 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(self.path.read_text(), '{"version":1,"stock":{}}')
 
     def test_unknown_reservation_returns_not_found(self):
-        for operation in (self.inventory.reservation, self.inventory.release):
-            with self.assertRaises(ApiError) as caught:
-                operation("absent")
-            self.assertEqual(caught.exception.status, 404)
+        with self.assertRaises(ApiError) as caught:
+            self.inventory.reservation("absent")
+        self.assertEqual(caught.exception.status, 404)
+
+    def test_release_before_reserve_persists_cancellation_fence(self):
+        stock = self.inventory.stock()
+        response = self.inventory.release("delayed")
+        self.assertEqual(self.inventory.stock(), stock)
+        self.inventory.close()
+        self.inventory = Inventory(self.path, 999)
+        self.assertEqual(self.inventory.release("delayed"), response)
+        with self.assertRaises(ApiError) as caught:
+            self.inventory.reserve(self.request("delayed"))
+        self.assertEqual(caught.exception.code, "reservation_released")
+        self.assertEqual(self.inventory.stock(), stock)
+
+    def test_concurrent_reserve_release_leaves_no_deduction(self):
+        stock = self.inventory.stock()
+        def reserve():
+            try:
+                self.inventory.reserve(self.request("racing"))
+            except ApiError as error:
+                self.assertEqual(error.code, "reservation_released")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            tasks = [executor.submit(reserve), executor.submit(self.inventory.release, "racing")]
+            for task in tasks:
+                task.result()
+        self.assertEqual(self.inventory.reservation("racing")["status"], "released")
+        self.assertEqual(self.inventory.stock(), stock)
 
 
 class HTTPTests(unittest.TestCase):

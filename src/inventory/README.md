@@ -8,4 +8,6 @@ Run locally with `INVENTORY_STATE_FILE=/tmp/beer-inventory.json python3 src/inve
 
 Tests: `python3 -m unittest discover -s src/inventory -p 'test_*.py' -v`.
 
+Releasing an unknown batch persists a cancellation tombstone without changing stock. A delayed reserve for that batch returns `409 reservation_released`, including after a service restart. This closes the cancellation race when an earlier reservation request timed out.
+
 Build from repository root: `docker build -f src/inventory/Dockerfile -t beerfactory-inventory .`.

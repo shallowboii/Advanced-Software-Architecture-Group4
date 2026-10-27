@@ -166,10 +166,10 @@ class Inventory:
         with self._mutex:
             previous = self._state["reservations"].get(batch_id)
             if previous:
-                if previous["ingredients"] != requested:
-                    raise ApiError(409, "idempotency_conflict", "This batch ID already has different ingredients")
                 if previous["status"] == "released":
                     raise ApiError(409, "reservation_released", "A released reservation cannot be reused")
+                if previous["ingredients"] != requested:
+                    raise ApiError(409, "idempotency_conflict", "This batch ID already has different ingredients")
                 return copy.deepcopy(previous["response"])
             if any(Decimal(self._state["stock"][key]) < Decimal(requested[key]) for key in INGREDIENTS):
                 raise ApiError(409, "insufficient_stock", "Not enough ingredients to reserve this batch")
@@ -194,14 +194,20 @@ class Inventory:
         identifier(batch_id)
         with self._mutex:
             previous = self._state["reservations"].get(batch_id)
-            if previous is None:
-                raise ApiError(404, "not_found", "Reservation not found")
-            if previous["status"] == "released":
+            if previous and previous["status"] == "released":
                 return copy.deepcopy(previous["release_response"])
             candidate = copy.deepcopy(self._state)
-            candidate["stock"] = add_stock(candidate["stock"], previous["ingredients"], 1)
+            if previous:
+                candidate["stock"] = add_stock(candidate["stock"], previous["ingredients"], 1)
             response = {"batch_id": batch_id, "status": "released", "stock": public_stock(candidate["stock"])}
-            candidate["reservations"][batch_id].update(status="released", release_response=response)
+            if previous:
+                candidate["reservations"][batch_id].update(status="released", release_response=response)
+            else:
+                # Fence a delayed reserve after a cancellation with an unknown outcome.
+                candidate["reservations"][batch_id] = {
+                    "ingredients": {key: "0" for key in INGREDIENTS}, "status": "released",
+                    "response": response, "release_response": response,
+                }
             self._commit(candidate)
             return copy.deepcopy(response)
 
