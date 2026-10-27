@@ -107,6 +107,17 @@ class FactoryServiceTest {
         factory.reservationReleased(s(pending,"id"),1);assertNull(batch(s(pending,"id")));assertEquals(0,factory.activeWip());
         assertEquals(0,store.count("SELECT count(*) FROM command WHERE cmd='START'"));
     }
+    @Test void stopBarrierRequiresTrackedAckEvenAfterStoppedHeartbeat(){
+        factory.locked(()->factory.stopLine(true,"test"));
+        for(JsonNode current:factory.machines()){
+            var snapshot=(ObjectNode)current.deepCopy();snapshot.put("state_version",snapshot.path("state_version").asLong()+1);snapshot.put("global_stop",true);factory.heartbeat(snapshot);
+        }
+        assertEquals(6,((List<?>)((Map<?,?>)factory.line()).get("machines_pending_stop")).size());
+        var command=store.one("SELECT * FROM command WHERE machine_id='mash-1' AND cmd='STOP'");
+        var stopped=json.object();stopped.put("event_id",id());stopped.put("event","STOPPED");stopped.put("scope","global");stopped.put("command_id",s(command,"id"));stopped.put("machine_id","mash-1");
+        stopped.set("snapshot",j(store.one("SELECT snapshot FROM machine WHERE id='mash-1'"),"snapshot"));factory.machineEvent(stopped);
+        var pending=(List<?>)((Map<?,?>)factory.line()).get("machines_pending_stop");assertEquals(5,pending.size());assertTrue(!pending.contains("mash-1"));
+    }
     @Test void retryKeysAndGlobalStopAreTransactional(){
         var body=json.read("{\"recipe_id\":\"lager\",\"quantity\":2}");
         var first=factory.mutate("orders","duplicate",body,()->factory.order(body,"test"));

@@ -100,7 +100,9 @@ public class FactoryService {
     public Object line() {
         Map<String,Object> state=store.state();
         state.put("active_wip",activeWip());
-        state.put("machines_pending_stop",machines().stream().filter(m->!m.path("online").asBoolean()||!m.path("global_stop").asBoolean()).map(m->m.path("machine_id").asText()).toList());
+        Set<String> awaitingAck=new HashSet<>();
+        for(Map<String,Object> command:store.rows("SELECT DISTINCT machine_id FROM command WHERE cmd='STOP' AND payload->>'scope'='global' AND acknowledged=false"))awaitingAck.add(s(command,"machine_id"));
+        state.put("machines_pending_stop",machines().stream().filter(m->!m.path("online").asBoolean()||!m.path("global_stop").asBoolean()||awaitingAck.contains(m.path("machine_id").asText())).map(m->m.path("machine_id").asText()).toList());
         if(!b(state,"stopped")) state.put("machines_pending_stop",List.of());
         return state;
     }
