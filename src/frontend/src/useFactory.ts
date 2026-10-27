@@ -19,7 +19,7 @@ const endpoints = {
   batches: "/batches",
   inventory: "/inventory",
   line: "/line",
-  events: "/events?limit=150",
+  events: "/events?limit=150&order=desc",
   experiment: "/experiment/status",
 } as const;
 

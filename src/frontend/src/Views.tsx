@@ -463,6 +463,7 @@ export function HistoryView({
         machine_id: machineId,
         sensor,
         limit: "1000",
+        order: "desc",
       });
       if (from) params.set("from", new Date(from).toISOString());
       if (to) params.set("to", new Date(to).toISOString());
@@ -477,7 +478,7 @@ export function HistoryView({
             signal: abort.signal,
           }),
           request<ProductionEvent[]>(
-            `/events?machine_id=${encodeURIComponent(machineId)}&limit=100`,
+            `/events?machine_id=${encodeURIComponent(machineId)}&limit=100&order=desc`,
             { signal: abort.signal },
           ),
         ]);
@@ -987,7 +988,7 @@ export function BatchHistory({
   useEffect(() => {
     let disposed = false;
     void request<ProductionEvent[]>(
-      `/events?batch_id=${encodeURIComponent(batch.id)}&limit=500`,
+      `/events?batch_id=${encodeURIComponent(batch.id)}&limit=500&order=desc`,
     )
       .then((value) => {
         if (!disposed) setEvents(value);
