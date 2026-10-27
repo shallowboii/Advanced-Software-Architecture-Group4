@@ -159,6 +159,17 @@ static void aborted_reservation_tombstone(void) {
     abort.epoch = 999; assert(!send(&m, &abort)); /* cached result survives epoch handover */
     assert(count_event(&m, "TRANSFER_ABORTED") == 1); bf_close(&m);
 }
+static void abort_unprepared_source(void) {
+    BFMachine m; init(&m, "mash", "mash-0"); start(&m); tick(&m, 1);
+    BFCommand stop = command(&m, "STOP"); strcpy(stop.scope, "local"); assert(!send(&m, &stop));
+    BFCommand prepare = stage(&m, "PREPARE_TRANSFER"); strcpy(prepare.transfer_id, "transfer-1");
+    strcpy(prepare.role, "source"); strcpy(prepare.peer_id, "lauter-0"); assert(send(&m, &prepare) == 1);
+    BFCommand abort = transfer_cmd(&m, "ABORT_TRANSFER"); assert(!send(&m, &abort));
+    assert(!strcmp(m.s.state, "READY_TO_TRANSFER")); assert(!strcmp(m.s.batch_id, "batch-1"));
+    assert(strstr(response, "\"transfer_id\":\"transfer-1\""));
+    assert(strstr(response, "\"batch_id\":null")); /* coordinator resolves through transfer ID */
+    bf_close(&m);
+}
 static void transfer_stop_and_healthy_commit(void) {
     BFMachine a, b; prepare_pair(&a, &b);
     BFCommand ca = transfer_cmd(&a, "EXECUTE_TRANSFER"), cb = transfer_cmd(&b, "EXECUTE_TRANSFER");
@@ -182,7 +193,7 @@ static void transfer_stop_and_healthy_commit(void) {
 }
 int main(void) {
     scopes_and_expiry(); duplicate_and_fencing(); spoil_while_stopped_and_flush();
-    unitank_and_filter(); transfer_and_discard_race(); abort_flush_inflight(); restart_and_ack(); aborted_reservation_tombstone(); transfer_stop_and_healthy_commit();
-    puts("PASS: 9 core scenarios (durability, replay, fencing, STOP, expiry, phases, transfers, discard races)");
+    unitank_and_filter(); transfer_and_discard_race(); abort_flush_inflight(); restart_and_ack(); aborted_reservation_tombstone(); transfer_stop_and_healthy_commit(); abort_unprepared_source();
+    puts("PASS: 10 core scenarios (durability, replay, fencing, STOP, expiry, phases, transfers, discard races)");
     return 0;
 }

@@ -367,7 +367,7 @@ int bf_command(BFMachine *m, const BFCommand *c, double mono, double wall, char 
             event = "TRANSFER_COMMITTED";
         }
     } else if (!strcmp(c->cmd, "ABORT_TRANSFER")) {
-        if (*c->transfer_id && !active_transfer(m) && is_state(m, "EMPTY") && !transfer_decided(m, c->transfer_id)) event = "TRANSFER_ABORTED";
+        if (*c->transfer_id && !active_transfer(m) && !transfer_decided(m, c->transfer_id)) event = "TRANSFER_ABORTED";
         else if (!active_transfer(m) || strcmp(c->transfer_id, m->s.transfer_id)) reason = "unknown_transfer";
         else {
             if (!strcmp(m->s.transfer_role, "target")) empty(&m->s);
