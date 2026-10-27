@@ -450,7 +450,11 @@ public class FactoryService {
         int limit=Integer.parseInt(filters.getOrDefault("limit","1000")),offset=Integer.parseInt(filters.getOrDefault("offset","0"));
         if(limit<1||limit>10000||offset<0)throw new IllegalArgumentException("limit 1..10000, offset >=0 required");
         if(!telemetry&&filters.containsKey("after")){sql.append(" AND recorded_seq>?");args.add(Long.parseLong(filters.get("after")));}
-        sql.append(telemetry?" ORDER BY ts_utc,event_id LIMIT ? OFFSET ?":" ORDER BY recorded_seq LIMIT ? OFFSET ?");args.add(limit);args.add(offset);
+        String order=filters.getOrDefault("order","asc");
+        if(!Set.of("asc","desc").contains(order))throw new IllegalArgumentException("order must be asc or desc");
+        String direction=order.equals("desc")?" DESC":" ASC";
+        sql.append(telemetry?" ORDER BY ts_utc"+direction+",event_id"+direction:" ORDER BY recorded_seq"+direction);
+        sql.append(" LIMIT ? OFFSET ?");args.add(limit);args.add(offset);
         return store.rows(sql.toString(),args.toArray()).stream().map(row->j(row,"payload")).toList();
     }
     public void telemetry(JsonNode sample) {

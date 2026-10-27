@@ -117,5 +117,7 @@ class FactoryServiceTest {
         assertEquals(0,store.count("SELECT count(*) FROM command WHERE cmd='STOP' AND acknowledged=false"));
         var pages=factory.events(Map.of("limit","1"),false);assertEquals(1,pages.size());long seq=pages.getFirst().path("recorded_seq").asLong();
         assertTrue(factory.events(Map.of("after",Long.toString(seq)),false).stream().allMatch(e->e.path("recorded_seq").asLong()>seq));
+        assertTrue(factory.events(Map.of("order","desc","limit","1"),false).getFirst().path("recorded_seq").asLong()>seq);
+        assertThrows(IllegalArgumentException.class,()->factory.events(Map.of("order","unsafe"),false));
     }
 }
