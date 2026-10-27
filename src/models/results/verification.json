@@ -1,11 +1,17 @@
 {
-  "recorded_at": "2026-10-27T16:16:14.180872+00:00",
+  "recorded_at": "2026-10-27T16:47:21.226008+00:00",
   "tool": "/opt/homebrew/bin/verifyta",
-  "verified": false,
+  "verified": true,
   "variants": {
     "naive": {
-      "exit_code": 1,
-      "answers": [],
+      "exit_code": 0,
+      "answers": [
+        false,
+        false,
+        true,
+        true,
+        true
+      ],
       "expected": [
         false,
         false,
@@ -13,11 +19,17 @@
         true,
         true
       ],
-      "matched": false
+      "matched": true
     },
     "reserved": {
-      "exit_code": 1,
-      "answers": [],
+      "exit_code": 0,
+      "answers": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
       "expected": [
         true,
         true,
@@ -25,7 +37,7 @@
         true,
         true
       ],
-      "matched": false
+      "matched": true
     }
   }
 }

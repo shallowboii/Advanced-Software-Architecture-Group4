@@ -1,1 +1,22 @@
-License does not cover verifier.
+[2K
+Verifying formula 1 at /nta/queries/query[1]/formula
+ -- Formula: A[] reservations <= 1
+[2K -- Formula is satisfied.
+[2K
+Verifying formula 2 at /nta/queries/query[2]/formula
+ -- Formula: A[] destination_owners <= 1
+[2K -- Formula is satisfied.
+[2K
+Verifying formula 3 at /nta/queries/query[3]/formula
+ -- Formula: A[] not deadlock
+[2K -- Formula is satisfied.
+[2K
+Verifying formula 4 at /nta/queries/query[4]/formula
+ -- Formula: E<> batch0.Completed
+[2K -- Formula is satisfied.
+ -- Writing witness trace to /Users/jjmm0/Documents/repos/Advanced-Software-Architecture-Group4/src/models/results/reserved-4
+[2K
+Verifying formula 5 at /nta/queries/query[5]/formula
+ -- Formula: E<> operator_process.Stopped
+[2K -- Formula is satisfied.
+ -- Writing witness trace to /Users/jjmm0/Documents/repos/Advanced-Software-Architecture-Group4/src/models/results/reserved-5

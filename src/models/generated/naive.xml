@@ -56,7 +56,7 @@ broadcast chan tick;
     <name>Batch</name>
     <parameter>const int id</parameter>
     <declaration>int[0,100] age = 0;
-int[0,3] progress = 0;</declaration>
+int[0,3] process_ticks = 0;</declaration>
     <location id="Batch_Ready" x="0" y="0">
       <name>Ready</name>
     </location>
@@ -83,7 +83,7 @@ int[0,3] progress = 0;</declaration>
       <source ref="Batch_Ready" />
       <target ref="Batch_Transfer" />
       <label kind="guard">!stopped &amp;&amp; age &lt; HOLD &amp;&amp; ((!SAFE &amp;&amp; reservations &lt; 2) || reservations == 0)</label>
-      <label kind="assignment">reservations++, progress = 0</label>
+      <label kind="assignment">reservations++, process_ticks = 0</label>
     </transition>
     <transition>
       <source ref="Batch_Ready" />
@@ -94,13 +94,13 @@ int[0,3] progress = 0;</declaration>
       <source ref="Batch_Transfer" />
       <target ref="Batch_Transfer" />
       <label kind="synchronisation">tick?</label>
-      <label kind="assignment">age = age &lt; 100 ? age + 1 : age, progress = (!stopped &amp;&amp; progress &lt; 3) ? progress + 1 : progress</label>
+      <label kind="assignment">age = age &lt; 100 ? age + 1 : age, process_ticks = (!stopped &amp;&amp; process_ticks &lt; 3) ? process_ticks + 1 : process_ticks</label>
     </transition>
     <transition>
       <source ref="Batch_Transfer" />
       <target ref="Batch_Receiving" />
-      <label kind="guard">!stopped &amp;&amp; progress &gt;= 2 &amp;&amp; age &lt; HOLD</label>
-      <label kind="assignment">destination_owners++, progress = 0</label>
+      <label kind="guard">!stopped &amp;&amp; process_ticks &gt;= 2 &amp;&amp; age &lt; HOLD</label>
+      <label kind="assignment">destination_owners++, process_ticks = 0</label>
     </transition>
     <transition>
       <source ref="Batch_Transfer" />
@@ -112,12 +112,12 @@ int[0,3] progress = 0;</declaration>
       <source ref="Batch_Receiving" />
       <target ref="Batch_Receiving" />
       <label kind="synchronisation">tick?</label>
-      <label kind="assignment">progress = (!stopped &amp;&amp; progress &lt; 3) ? progress + 1 : progress</label>
+      <label kind="assignment">process_ticks = (!stopped &amp;&amp; process_ticks &lt; 3) ? process_ticks + 1 : process_ticks</label>
     </transition>
     <transition>
       <source ref="Batch_Receiving" />
       <target ref="Batch_Completed" />
-      <label kind="guard">!stopped &amp;&amp; progress &gt;= 2</label>
+      <label kind="guard">!stopped &amp;&amp; process_ticks &gt;= 2</label>
       <label kind="assignment">destination_owners--, reservations--</label>
     </transition>
   </template>

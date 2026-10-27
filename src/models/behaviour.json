@@ -23,18 +23,18 @@
     {
       "name": "Batch",
       "parameter": "const int id",
-      "declaration": "int[0,100] age = 0;\nint[0,3] progress = 0;",
+      "declaration": "int[0,100] age = 0;\nint[0,3] process_ticks = 0;",
       "initial": "Ready",
       "states": [{"name": "Ready"}, {"name": "Transfer"}, {"name": "Receiving"}, {"name": "Completed"}, {"name": "Spoiled"}],
       "transitions": [
         {"source": "Ready", "target": "Ready", "sync": "tick?", "effect": "age = age < 100 ? age + 1 : age"},
-        {"source": "Ready", "target": "Transfer", "guard": "!stopped && age < HOLD && ((!SAFE && reservations < 2) || reservations == 0)", "effect": "reservations++, progress = 0", "requirement": "TRANSFER-1"},
+        {"source": "Ready", "target": "Transfer", "guard": "!stopped && age < HOLD && ((!SAFE && reservations < 2) || reservations == 0)", "effect": "reservations++, process_ticks = 0", "requirement": "TRANSFER-1"},
         {"source": "Ready", "target": "Spoiled", "guard": "age >= HOLD", "requirement": "HOLD-1"},
-        {"source": "Transfer", "target": "Transfer", "sync": "tick?", "effect": "age = age < 100 ? age + 1 : age, progress = (!stopped && progress < 3) ? progress + 1 : progress", "requirement": "STOP-1"},
-        {"source": "Transfer", "target": "Receiving", "guard": "!stopped && progress >= 2 && age < HOLD", "effect": "destination_owners++, progress = 0", "requirement": "TRANSFER-2"},
+        {"source": "Transfer", "target": "Transfer", "sync": "tick?", "effect": "age = age < 100 ? age + 1 : age, process_ticks = (!stopped && process_ticks < 3) ? process_ticks + 1 : process_ticks", "requirement": "STOP-1"},
+        {"source": "Transfer", "target": "Receiving", "guard": "!stopped && process_ticks >= 2 && age < HOLD", "effect": "destination_owners++, process_ticks = 0", "requirement": "TRANSFER-2"},
         {"source": "Transfer", "target": "Spoiled", "guard": "age >= HOLD", "effect": "reservations--", "requirement": "HOLD-1"},
-        {"source": "Receiving", "target": "Receiving", "sync": "tick?", "effect": "progress = (!stopped && progress < 3) ? progress + 1 : progress", "requirement": "STOP-1"},
-        {"source": "Receiving", "target": "Completed", "guard": "!stopped && progress >= 2", "effect": "destination_owners--, reservations--", "requirement": "OUTPUT-1"}
+        {"source": "Receiving", "target": "Receiving", "sync": "tick?", "effect": "process_ticks = (!stopped && process_ticks < 3) ? process_ticks + 1 : process_ticks", "requirement": "STOP-1"},
+        {"source": "Receiving", "target": "Completed", "guard": "!stopped && process_ticks >= 2", "effect": "destination_owners--, reservations--", "requirement": "OUTPUT-1"}
       ]
     }
   ],

@@ -21,12 +21,12 @@ state "Batch" as Batch {
   state Batch_Spoiled
   [*] --> Batch_Ready
   Batch_Ready --> Batch_Ready : tick? / age = age < 100 ? age + 1 : age
-  Batch_Ready --> Batch_Transfer : !stopped && age < HOLD && ((!SAFE && reservations < 2) || reservations == 0) / reservations++, progress = 0
+  Batch_Ready --> Batch_Transfer : !stopped && age < HOLD && ((!SAFE && reservations < 2) || reservations == 0) / reservations++, process_ticks = 0
   Batch_Ready --> Batch_Spoiled : age >= HOLD
-  Batch_Transfer --> Batch_Transfer : tick? / age = age < 100 ? age + 1 : age, progress = (!stopped && progress < 3) ? progress + 1 : progress
-  Batch_Transfer --> Batch_Receiving : !stopped && progress >= 2 && age < HOLD / destination_owners++, progress = 0
+  Batch_Transfer --> Batch_Transfer : tick? / age = age < 100 ? age + 1 : age, process_ticks = (!stopped && process_ticks < 3) ? process_ticks + 1 : process_ticks
+  Batch_Transfer --> Batch_Receiving : !stopped && process_ticks >= 2 && age < HOLD / destination_owners++, process_ticks = 0
   Batch_Transfer --> Batch_Spoiled : age >= HOLD / reservations--
-  Batch_Receiving --> Batch_Receiving : tick? / progress = (!stopped && progress < 3) ? progress + 1 : progress
-  Batch_Receiving --> Batch_Completed : !stopped && progress >= 2 / destination_owners--, reservations--
+  Batch_Receiving --> Batch_Receiving : tick? / process_ticks = (!stopped && process_ticks < 3) ? process_ticks + 1 : process_ticks
+  Batch_Receiving --> Batch_Completed : !stopped && process_ticks >= 2 / destination_owners--, reservations--
 }
 @enduml
