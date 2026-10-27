@@ -37,11 +37,11 @@ All rows in this section come from S1 p. 9.
 
 | Course requirement | Concrete coverage | Evidence to produce |
 | --- | --- | --- |
-| Different programming languages | C controllers, Java backend, Go inventory, TypeScript frontend; Python tools. | Source/builds, language rationale and actual cross-language execution. |
+| Different programming languages | C controllers, Java backend, Python inventory, TypeScript frontend; Python tools. | Source/builds, language rationale and actual cross-language execution. |
 | Different databases | PostgreSQL durable production records, Redis live cache, SQLite controller journals. | Schemas, migrations, cache reconstruction and restart tests; database trade-offs. |
 | Different message buses | RabbitMQ MQTT for control, Kafka for telemetry/history. | Working flows on both brokers, contracts and rationale for the split. One broker alone would not cover the stated plurality. |
 | Different containers | Individual machine containers, application services and infrastructure containers. | Compose/Kubernetes manifests, running instances and CI-published application images. |
-| Point-to-point communication across languages | Java HTTP client to Go inventory using JSON contracts. | Reservation, conflict, timeout/retry and duplicate-request integration tests. Protocol Buffers is an example, not compulsory. |
+| Point-to-point communication across languages | Java HTTP client to Python inventory using JSON contracts. | Reservation, conflict, timeout/retry and duplicate-request integration tests. Protocol Buffers is an example, not compulsory. |
 | Different architectural styles | Event-driven machine integration, client-server REST/WS, service decomposition and internal backend layers. | Analysis/design views and responsibility/interface definitions. |
 | Architectural patterns and tactics | Adapter, state machine, central orchestration, bounded retries, circuit breaker, inbox/outbox, deduplication, heartbeat, leader fencing and drain-before-update. | Implemented instances, named alternatives, QAS links and tests; not just a vocabulary list. |
 | Requirement representation and formalisation | Revised FR/NFR/QAS, feature links, SysML/ADL relationships, formal properties. | Traceability table and query/test/result links, M0/M6. |

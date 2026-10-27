@@ -63,14 +63,14 @@ Use short recipe fixtures for CI. Scientific runs use the declared recipe durati
 | --- | --- | --- |
 | Machine controller | C, Paho MQTT, librdkafka, cJSON, SQLite | State machine, simulated sensors, local controls, durable command deduplication, operation progress and event journal. |
 | Production backend | Java 21, compatible pinned Spring Boot release, Maven, JDBC | Orders, recipe versions, scheduler, transfer coordination, recovery, REST, WebSocket and experiment control. |
-| Inventory | Go HTTP service | Ingredient stock, idempotent reservations, restock and reservation status. |
+| Inventory | Python HTTP service | Ingredient stock, idempotent reservations, restock and reservation status. |
 | Frontend | TypeScript, React, Vite, Recharts, nginx | Production dashboard, orders, recipes, machine controls, history and experiment status. |
 | RabbitMQ | MQTT plugin | Control commands, machine events, acknowledgements and heartbeat. |
 | Kafka | KRaft | Sensor telemetry and replayable production-event stream. |
 | PostgreSQL | Relational store with versioned migrations | Authoritative production records, command/event inbox and outbox, transfer decisions, recipes and experiments. |
 | Redis | Expiring live-state cache | Last-seen machine state and recent sensor values. Losing Redis does not lose production state. |
 
-Use HTTP/JSON between Java and Go as the required point-to-point, cross-language integration. Specify its request, response and error contracts. Protocol Buffers is an example in the course brief, not a required technology.
+Use HTTP/JSON between Java and Python as the required point-to-point, cross-language integration. Specify its request, response and error contracts. Protocol Buffers is an example in the course brief, not a required technology.
 
 The primary systems in the analysis architecture are Production Management (orders, scheduler, recipes), Machine Control (controllers, local inputs, process simulation), and Material Supply (inventory). Monitoring and the supervisor interface connect these systems. This provides the three primary systems requested in Exercise 3 without splitting every Java module into a separate service.
 
@@ -135,7 +135,7 @@ This separation must be reflected in the report: the local stop latency and netw
 
 PostgreSQL owns orchestration decisions; controller journals own evidence of local execution. Recovery compares both before issuing new commands. Redis is rebuilt from heartbeats. An expired live-state key is a detection aid, not the only record of the machine or its contents.
 
-Inventory reservations use batch ID as the idempotency key. A timed-out reserve request is queried or retried with the same key. Persist stock and reservation records together using a single-writer, atomically replaced file on the inventory volume, keeping the service in the Go standard library. This is a deliberate improvement over the original in-memory mock: a restart must not restore consumed ingredients. Cancellation before admission releases the reservation once; flushing an admitted batch does not refund ingredients.
+Inventory reservations use batch ID as the idempotency key. A timed-out reserve request is queried or retried with the same key. Persist stock and reservation records together using a single-writer, atomically replaced file on the inventory volume, keeping the service in the Python standard library. This is a deliberate improvement over the original in-memory mock: a restart must not restore consumed ingredients. Cancellation before admission releases the reservation once; flushing an admitted batch does not refund ingredients.
 
 ## 5 Scheduling and recipe changes
 
@@ -204,7 +204,7 @@ Each milestone leaves runnable evidence and updates the requirement trace. Docum
 | Step | Work and outputs | Completion gate |
 | --- | --- | --- |
 | M0 Establish baseline and contracts | Fetch the current group repo, preserve group work, create an implementation branch. Record agreed scope, revised FR/NFR/QAS, message schemas, state transitions, recipe fixtures and analysis/design component views. | Course matrix has no unassigned item; no CIP or separate maturation machine appears in the current design; sample contracts validate. |
-| M1 Running communication skeleton | Four application images, Compose, RabbitMQ MQTT, Kafka, PostgreSQL, Redis, migrations and health checks. One C machine sends heartbeat and telemetry to the Java backend and UI. Java calls Go inventory. | Real container-to-container command/reply, telemetry persistence, WebSocket update and Java-to-Go reservation all work. Establish build/test CI now. |
+| M1 Running communication skeleton | Four application images, Compose, RabbitMQ MQTT, Kafka, PostgreSQL, Redis, migrations and health checks. One C machine sends heartbeat and telemetry to the Java backend and UI. Java calls Python inventory. | Real container-to-container command/reply, telemetry persistence, WebSocket update and Java-to-Python reservation all work. Establish build/test CI now. |
 | M2 Controller and local controls | Six machine configurations, uni-tank phases, SQLite journal, command deduplication, simulated sensor profiles/alarms, local stop/flush adapter, permits, checkpoints and recovery report. | Duplicate START does not run twice; controller restart preserves contents; local STOP works with backend/brokers down; expiry does not move material while stopped. |
 | M3 Orders and durable coordination | Recipes/versions, orders, admission, persistent inventory reservation, transactional inbox/outbox, two-end transfer and recovery, automatic filter output. | One 50 hL batch traverses all six machine types once. Failures before/after each transfer decision recover without duplicate occupancy, output or loss. |
 | M4 Production policies and interventions | PUSH/CONWIP, deadline-based transfers, hold expiry, order cancellation, local/web flush, global STOP/reset/resume, shortage/restock. | Ten short-fixture batches; shortage stops only admission; recipe changes leave active batches intact; multi-machine STOP and transfer-time flush pass fault tests. |
@@ -276,7 +276,7 @@ src/
   contracts/                  JSON schemas and cross-language fixtures
   machine/                    C controller, local operator CLI, tests, Dockerfile
   backend/                    Java services, migrations, tests, Dockerfile
-  inventory/                  Go service, durable stock ledger, tests, Dockerfile
+  inventory/                  Python service, durable stock ledger, tests, Dockerfile
   frontend/                   React application, browser tests, nginx, Dockerfile
   config/                     Recipe and topology profiles
   deploy/compose/             Base configuration and generated stable-ID profiles
@@ -291,7 +291,7 @@ report/GroupTemplate/          Course report and bibliography
 
 Keep application and experiment source under `src`, as required by the repository template. A root Compose file or Makefile can delegate into it.
 
-CI on every PR: schema checks, meaningful C/Java/Go tests, TypeScript build, generated-model checks, four image builds, complete Compose smoke test, manifest validation and report compilation when relevant. No `continue-on-error` on required correctness gates. Upload logs and test artifacts on failure.
+CI on every PR: schema checks, meaningful C/Java/Python tests, TypeScript build, generated-model checks, four image builds, complete Compose smoke test, manifest validation and report compilation when relevant. No `continue-on-error` on required correctness gates. Upload logs and test artifacts on failure.
 
 Publish four images to GHCR from trusted branch pushes after checks, using unique commit tags and `packages: write`; keep untrusted PR validation read-only and do not publish `latest` from PRs. Resolve the actual repository-owner/package permissions in M0. The publication mechanism follows [GitHub's container publication guidance](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images). Test that deployment pulls the published images. Publish both required CPU architectures when the chosen local and cluster platforms differ.
 
