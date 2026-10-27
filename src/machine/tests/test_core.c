@@ -222,9 +222,10 @@ static int capture(const char *payload, void *ctx) {
     Capture *c = ctx; if (c->fail) return -1;
     c->count++; snprintf(c->last, sizeof c->last, "%s", payload); return 0;
 }
-static void immediate_events_skip_unacked_backlog(void) {
+static void new_events_follow_already_enqueued_history(void) {
     BFMachine m; init(&m, "mash", "mash-0");
     for (int i = 0; i < 70; i++) { BFCommand c = command(&m, "SNAPSHOT"); assert(!send(&m, &c)); }
+    /* These prior events were already enqueued on the current connection. */
     uint64_t cursor = m.s.machine_sequence;
     BFCommand c = command(&m, "STOP"); strcpy(c.scope, "global"); assert(!send(&m, &c));
     Capture sink = {0}; sink.fail = 1;
@@ -237,9 +238,36 @@ static void immediate_events_skip_unacked_backlog(void) {
     assert(bf_outbox(&m, 64, capture, &sink) == 64); /* old backlog still retries */
     bf_close(&m);
 }
+typedef struct { int count, spoiled_at, flushed_at; } OrderedCapture;
+static int capture_order(const char *payload, void *ctx) {
+    OrderedCapture *c = ctx; c->count++;
+    if (strstr(payload, "\"event\":\"SPOILED\"")) c->spoiled_at = c->count;
+    if (strstr(payload, "\"event\":\"FLUSHED\"")) c->flushed_at = c->count;
+    return 0;
+}
+static void restart_history_precedes_new_removal(void) {
+    char path[] = "/tmp/beer-machine-history-XXXXXX"; int fd = mkstemp(path); assert(fd >= 0); close(fd);
+    BFMachine m; assert(!bf_open(&m, path, "mash-0", "mash", 1, .2, now, 100000+now));
+    for (int i = 0; i < 70; i++) { BFCommand c = command(&m, "SNAPSHOT"); assert(!send(&m, &c)); }
+    permit(&m); BFCommand c = stage(&m, "START"); c.hold_h = .1; assert(!send(&m, &c));
+    tick(&m, 1); tick(&m, .2); assert(m.s.spoiled); bf_close(&m);
+    assert(!bf_open(&m, path, "mash-0", "mash", 1, .2, now, 100000+now));
+    now += .01; permit(&m); tick(&m, .3); assert(!strcmp(m.s.state, "EMPTY"));
+    uint64_t cursor = 0; OrderedCapture sink = {0};
+    assert(bf_outbox_new(&m, &cursor, 64, capture_order, &sink) == 64);
+    assert(sink.count == 64 && sink.spoiled_at == 0 && sink.flushed_at == 0);
+    assert(bf_outbox_new(&m, &cursor, 64, capture_order, &sink) > 0);
+    assert(sink.spoiled_at > 64 && sink.flushed_at > sink.spoiled_at);
+    assert(cursor == m.s.machine_sequence);
+    /* A reconnect makes delivery unknown again and must replay from history. */
+    cursor = 0; memset(&sink, 0, sizeof sink);
+    assert(bf_outbox_new(&m, &cursor, 64, capture_order, &sink) == 64);
+    assert(!sink.spoiled_at && !sink.flushed_at);
+    bf_close(&m); unlink(path);
+}
 int main(void) {
     scopes_and_expiry(); duplicate_and_fencing(); spoil_while_stopped_and_flush();
-    unitank_and_filter(); transfer_and_discard_race(); abort_flush_inflight(); restart_and_ack(); aborted_reservation_tombstone(); transfer_stop_and_healthy_commit(); abort_unprepared_source(); repeated_flush_preserves_progress(); recipe_flush_duration(); immediate_events_skip_unacked_backlog();
-    puts("PASS: 13 core scenarios (durability, replay, fencing, STOP, expiry, phases, transfers, discard races)");
+    unitank_and_filter(); transfer_and_discard_race(); abort_flush_inflight(); restart_and_ack(); aborted_reservation_tombstone(); transfer_stop_and_healthy_commit(); abort_unprepared_source(); repeated_flush_preserves_progress(); recipe_flush_duration(); new_events_follow_already_enqueued_history(); restart_history_precedes_new_removal();
+    puts("PASS: 14 core scenarios (durability, replay, fencing, STOP, expiry, phases, transfers, discard races)");
     return 0;
 }

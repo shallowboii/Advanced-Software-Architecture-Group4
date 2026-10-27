@@ -494,8 +494,9 @@ int bf_outbox(BFMachine *m, int limit, int (*send)(const char *, void *), void *
     sqlite3_finalize(q); return n;
 }
 
-/* First publication skips an old unacknowledged backlog. Every event remains
-   in the same durable outbox until ACK; bf_outbox still retries that backlog. */
+/* Send pending history in machine sequence order. The caller starts at zero
+   after boot/reconnect and may skip only events enqueued on this connection.
+   Every event remains durable until ACK; bf_outbox also retries sent history. */
 int bf_outbox_new(BFMachine *m, uint64_t *after_sequence, int limit,
                   int (*send)(const char *, void *), void *ctx) {
     sqlite3_stmt *q;

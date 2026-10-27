@@ -32,7 +32,7 @@ typedef struct {
     pthread_mutex_t lock;
     Incoming queue[QUEUE_SIZE];
     size_t head, tail, count;
-    atomic_int connected;
+    atomic_int connected, replay_reset;
     char cmd_topic[256], ack_topic[256], heartbeat_topic[256], events_topic[256];
 } App;
 static volatile sig_atomic_t running = 1;
@@ -54,10 +54,15 @@ static int publish(App *a, const char *topic, const char *payload, int qos) {
 }
 static int publish_event(const char *payload, void *ctx) { App *a = ctx; return publish(a, a->events_topic, payload, 1); }
 static void connection_lost(void *ctx, char *cause) {
-    App *a = ctx; atomic_store(&a->connected, 0);
+    App *a = ctx; atomic_store(&a->connected, 0); atomic_store(&a->replay_reset, 1);
     fprintf(stderr, "MQTT disconnected: %s\n", cause ? cause : "unknown");
 }
-static void subscribed(void *ctx, MQTTAsync_successData *data) { (void)data; App *a = ctx; atomic_store(&a->connected, 1); }
+static void subscribed(void *ctx, MQTTAsync_successData *data) {
+    (void)data; App *a = ctx;
+    /* A connection may have died before queued events reached the broker. Replay
+       its unknown history in order before publishing newer material events. */
+    atomic_store(&a->replay_reset, 1); atomic_store(&a->connected, 1);
+}
 static void subscribe_failed(void *ctx, MQTTAsync_failureData *data) {
     App *a = ctx; atomic_store(&a->connected, 0);
     fprintf(stderr, "MQTT subscribe failed: %d\n", data ? data->code : -1);
@@ -231,7 +236,7 @@ int main(void) {
     MQTTAsync_setCallbacks(a.mqtt, &a, connection_lost, arrived, NULL); MQTTAsync_setConnected(a.mqtt, &a, connected);
     a.kafka = kafka_open(env("KAFKA_BROKERS", "kafka:9092")); if (!a.kafka) return 2;
     double next_connect = 0, heartbeat_at = 0, telemetry_at = 0, replay_at = 0;
-    uint64_t published_sequence = a.machine.s.machine_sequence;
+    uint64_t published_sequence = 0;
     double heartbeat_s = env_num("HEARTBEAT_MS", 2000) / 1000.;
     fprintf(stderr, "Controller %s type=%s ready; local socket=%s\n", id, type, sock);
     int failed = 0;
@@ -262,6 +267,7 @@ int main(void) {
             next_connect = mono + 5;
         }
         if (mono >= heartbeat_at) { char snapshot[BF_JSON]; if (!bf_snapshot(&a.machine, mono, snapshot, sizeof snapshot)) publish(&a, a.heartbeat_topic, snapshot, 0); heartbeat_at = mono + heartbeat_s; }
+        if (atomic_exchange(&a.replay_reset, 0)) published_sequence = 0;
         if (atomic_load(&a.connected) && published_sequence < a.machine.s.machine_sequence) {
             if (bf_outbox_new(&a.machine, &published_sequence, 64, publish_event, &a) < 0) { failed = 1; break; }
         }
