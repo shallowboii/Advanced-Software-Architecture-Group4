@@ -1,5 +1,7 @@
 # Production experiments
 
+Polish step-by-step Kubernetes procedure: [INSTRUKCJA_EKSPERYMENTU.txt](INSTRUKCJA_EKSPERYMENTU.txt).
+
 Use an isolated factory with fresh volumes for each run. The runner refuses an active factory and preserves failed runs. Do not reuse demonstration state for scientific comparisons. Start the short-fixture smoke factory with `make up PROFILE=smoke`, then:
 
 ```sh

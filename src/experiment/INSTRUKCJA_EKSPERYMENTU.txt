@@ -1,0 +1,384 @@
+BEER FACTORY — EKSPERYMENT EFFICIENCY NA KUBERNETES
+
+Instrukcja dla macOS, Docker Desktop, kind, kubectl i Python 3.
+Wszystkie polecenia wykonuj w katalogu głównym repozytorium:
+
+    cd ~/Documents/repos/Advanced-Software-Architecture-Group4
+
+Wykonuj kolejne bloki dopiero po powodzeniu poprzednich. Nie wklejaj całego
+pliku jako skryptu. Poniższe polecenia przygotowują osobne klastry badawcze;
+nie zmieniają demonstracyjnej fabryki kind-beerfactory-test.
+
+1. CO BADAMY
+
+Porównujemy dwie polityki dopuszczania partii do tej samej linii:
+- PUSH: przyjmuj partię, jeżeli jest wolna maszyna wejściowa i surowce.
+- CONWIP: dodatkowo ogranicz liczbę partii znajdujących się w systemie.
+
+Główne wyniki: straty przez zepsucie oraz ukończone partie na symulowaną dobę.
+Dodatkowo: wyjście w hL, ręczne odrzuty, końcowy WIP i udziały czasu pracy,
+transferu, oczekiwania, zatrzymania i braku łączności dla maszyn.
+
+Mniejsza strata nie oznacza automatycznie większej efektywności: sprawdzamy
+również, czy nie spadła produkcja. Jedna partia ma zawsze 50 hL.
+
+Każda para PUSH/CONWIP ma identyczne receptury, liczbę maszyn, scenariusz,
+seed, przyspieszenie i wersje obrazów. Zmieniamy tylko politykę. W przykładzie
+limit CONWIP wynosi 20 przy 20 unitankach; wartość zapisujemy jawnie.
+W obu politykach fermentacja i maturacja zajmują ten sam unitank.
+
+2. CZAS I ZAKRES
+
+Pełne scenariusze mają 1008 h rozgrzewki i 2160 h pomiaru:
+42 + 90 = 132 symulowane dni. TIME_SCALE=2 oznacza 2 sekundy rzeczywiste na
+symulowaną godzinę. Jeden przebieg trwa nominalnie 6336 s, czyli 105,6 min.
+Para PUSH/CONWIP zajmie około 3,5 h plus przygotowanie klastrów i eksport.
+
+48-godzinny tryb --pilot trwa około 96 s i wymaga receptur smoke oraz jednego
+unitanka. Sprawdza mechanizm pomiarowy. Nie zastępuje pomiaru dla 20/40 tanków.
+
+Najpierw wykonaj próbę techniczną, potem pilotaż pełnych konfiguracji. Ustal
+liczbę powtórzeń i kryterium dopuszczalnego spadku przepustowości przed serią
+główną. W planie jest 30 par seedów dla wybranego scenariusza, po kalibracji.
+To około 106 godzin na jedną liczbę tanków przy tej prędkości, bez narzutów.
+
+Przy TIME_SCALE=2 jednogodzinny limit przetrzymania to tylko 2 realne sekundy.
+Sprawdź w pilotażu, czy opóźnienia sieci i koordynatora nie dominują wyników.
+Ewentualna zmiana przyspieszenia wymaga tej samej zmiany w obu porównywanych
+konfiguracjach i ponowienia całej pary na świeżych danych. TIME_SCALE jest
+zapisywany przy inicjalizacji bazy — sama zmiana env istniejącego backendu
+nie zmieni już zapisanego zegara. Dokumentuj każdą zmianę konfiguracji.
+
+3. PRZYGOTOWANIE OBRAZÓW — RAZ NA CAŁĄ SERIĘ
+
+Docker Desktop musi działać. Sprawdź narzędzia:
+
+    docker info --format '{{.ServerVersion}}'
+    kind version
+    kubectl version --client
+    python3 --version
+
+Jeżeli nie masz kind: brew install kind
+
+Zbuduj aktualne obrazy, zawierające poprawkę kolizji REDIS_PORT:
+
+    (
+      set -e
+      for component in machine backend inventory frontend; do
+        docker build -t "beerfactory-${component}:dev" \
+          -f "src/${component}/Dockerfile" .
+      done
+    )
+
+Wszystkie cztery buildy muszą się udać. Nie przebudowuj obrazów pomiędzy
+przebiegami tej samej serii. Zapisane niżej image ID pozwolą to sprawdzić.
+W czasie pomiarów nie wykonuj innych buildów ani innych eksperymentów.
+Uruchomienia wykonuj kolejno, na tym samym komputerze i przy takim samym
+przydziale CPU/RAM w Docker Desktop. Zasil komputer z sieci.
+
+4. PARAMETRY JEDNEGO PRZEBIEGU
+
+Wszystkie dalsze bloki do końca przebiegu wykonuj w tym samym terminalu.
+Przykład pierwszego przebiegu — CONWIP, 20 tanków, seed 1, stały popyt Ale:
+
+    export BF_POLICY=CONWIP
+    export BF_TANKS=20
+    export BF_SEED=1
+    export BF_SCENARIO=src/experiment/scenarios/steady.json
+    export BF_RUN_ID=conwip-20-s1
+    export BF_CLUSTER=bf-conwip-20-s1
+    export BF_PORT=18089
+    export BF_CONTEXT="kind-${BF_CLUSTER}"
+    export BF_RESULT="src/experiment/results/${BF_RUN_ID}"
+    export BF_META="src/experiment/results/_setup/${BF_RUN_ID}"
+
+RUN_ID, nazwa klastra i katalog wyników muszą być nowe. Nie nadpisuj wyników
+poprzedniej próby, także nieudanej. Podczas ponowienia użyj np. sufiksu -retry1
+i zachowaj opis przyczyny; nie wybieraj później tylko korzystnych wyników.
+
+    test ! -e "$BF_RESULT" && test ! -e "$BF_META"
+    kind get clusters
+
+Jeżeli test zwróci błąd albo wybrana nazwa klastra już istnieje, ustaw nowe
+nazwy. Nie usuwaj istniejącego klastra w ciemno.
+
+5. ŚWIEŻY KLASTER I PEŁNE RECEPTURY
+
+    mkdir -p "$BF_META"
+    kind create cluster --name "$BF_CLUSTER" --wait 5m
+
+    kind load docker-image \
+      beerfactory-machine:dev beerfactory-backend:dev \
+      beerfactory-inventory:dev beerfactory-frontend:dev \
+      --name "$BF_CLUSTER"
+
+    kubectl kustomize "src/deploy/k8s/overlays/${BF_TANKS}" \
+      > "$BF_META/deployment.yaml"
+    kubectl --context "$BF_CONTEXT" apply -f "$BF_META/deployment.yaml"
+
+Czekaj na gotowość wszystkich Deploymentów i StatefulSetów:
+
+    (
+      set -e
+      for resource in $(kubectl --context "$BF_CONTEXT" -n beerfactory \
+          get deployments,statefulsets -o name); do
+        kubectl --context "$BF_CONTEXT" -n beerfactory \
+          rollout status "$resource" --timeout=300s
+      done
+    )
+
+    kubectl --context "$BF_CONTEXT" -n beerfactory get pods
+
+Dla 20 tanków oczekujemy 25 maszyn; dla 40 — 45. Pozostałe Pody to usługi
+aplikacji i infrastruktura. Wszystkie powinny być gotowe.
+
+WAŻNE: nie zmieniaj istniejącej fabryki smoke na profil 20/40 w tym samym
+namespace i na tych samych wolumenach. Receptury zapisane w bazie pozostają
+w niej po zmianie ConfigMap. Nowy klaster zapewnia świeże bazy i wolumeny.
+Nie uruchamiaj smoke.py ani ręcznych zamówień na fabryce badawczej.
+
+6. DOSTĘP HTTP I KONTROLA PRZED STARTEM
+
+Uruchom port-forward w tle w tym samym terminalu:
+
+    kubectl --context "$BF_CONTEXT" -n beerfactory \
+      port-forward service/frontend "${BF_PORT}:80" \
+      > "$BF_META/port-forward.log" 2>&1 &
+    BF_FORWARD_PID=$!
+
+Zaczekaj na API i sprawdź topologię oraz pełne czasy unitanków:
+
+    PYTHONPATH=src/tools python3 - <<'PY'
+import os
+from http_client import Api
+from smoke import until
+api = Api('http://localhost:' + os.environ['BF_PORT'])
+tanks = int(os.environ['BF_TANKS'])
+until(lambda: api.call('/health').get('status') == 'ok', 120, 'backend')
+expected = {f'{kind}-0' for kind in ('mash','lauter','kettle','whirlpool','filter')}
+expected |= {f'unitank-{i}' for i in range(tanks)}
+until(lambda: expected <= {m['machine_id'] for m in api.call('/machines')
+                          if m.get('online') and not m.get('stopped')},
+      120, 'all expected machines online and permitted')
+assert len(api.call('/machines')) == tanks + 5
+line = api.call('/line')
+assert not line['stopped'] and line['active_wip'] == 0
+assert not api.call('/orders'), 'Expected a fresh factory with no orders'
+assert line['time_scale'] == 2, 'This protocol assumes TIME_SCALE=2'
+recipes = {r['id']: r for r in api.call('/recipes')}
+for ident, duration in [('ale',336), ('lager',840)]:
+    assert recipes[ident]['volume_hl'] == 50
+    tank = next(s for s in recipes[ident]['stages'] if s['type'] == 'unitank')
+    assert sum(p['duration_h'] for p in tank['phases']) == duration
+print('READY: fresh factory, full recipes, expected topology')
+PY
+
+Jeśli zobaczysz błąd, nie rozpoczynaj pomiaru. Sprawdź sekcję diagnostyki.
+
+7. ZAPIS WARUNKÓW EKSPERYMENTU
+
+Runner sam zapisuje seed, scenariusz, harmonogram, receptury, maszyny i Git SHA.
+Dodatkowo zachowaj konfigurację wdrożenia i informacje o środowisku:
+
+    git rev-parse HEAD > "$BF_META/git-sha.txt"
+    git status --short > "$BF_META/git-status.txt"
+    docker info --format 'version={{.ServerVersion}} cpus={{.NCPU}} memory_bytes={{.MemTotal}}' \
+      > "$BF_META/docker-resources.txt"
+    docker image inspect beerfactory-machine:dev beerfactory-backend:dev \
+      beerfactory-inventory:dev beerfactory-frontend:dev \
+      --format '{{.RepoTags}} {{.Id}}' > "$BF_META/image-ids.txt"
+    kubectl --context "$BF_CONTEXT" version -o json > "$BF_META/kubernetes-version.json"
+    kubectl --context "$BF_CONTEXT" get nodes -o json > "$BF_META/nodes.json"
+    kubectl --context "$BF_CONTEXT" -n beerfactory get pods -o json \
+      > "$BF_META/pods-before.json"
+
+Dopisz w "$BF_META/notes.txt": model komputera, inne aktywne obciążenia,
+zmiany względem protokołu oraz obserwowane problemy. Obrazy :dev są lokalnymi
+tagami; do porównania wersji używaj zapisanych image ID i imageID Podów.
+
+8. URUCHOMIENIE POMIARU
+
+    caffeinate -i python3 src/experiment/run.py \
+      --base-url "http://localhost:${BF_PORT}" \
+      --scenario "$BF_SCENARIO" \
+      --policy "$BF_POLICY" \
+      --tanks "$BF_TANKS" \
+      --wip-limit "$BF_TANKS" \
+      --seed "$BF_SEED" \
+      --run-id "$BF_RUN_ID" \
+      --timeout 18000
+    BF_EXIT=$?
+
+caffeinate ogranicza usypianie komputera na macOS; nie zamykaj klapy ani
+terminala. Na innym systemie uruchom bez prefiksu caffeinate i zapewnij brak
+usypiania. Limit 18000 to 5 godzin czasu rzeczywistego; przy skali 2 normalny
+przebieg powinien zakończyć się po około 106 minutach.
+
+Nie klikaj STOP, flush, restock, zmiany receptur ani nowych zamówień w panelu
+w trakcie pomiaru. Zaplanowane interwencje wykonuje sam runner.
+Po skończeniu runner zatrzymuje przyjmowanie nowych partii, włącza globalny
+STOP, czeka na potwierdzenia i eksportuje dane. Nie wznawiaj linii.
+
+Przy Ctrl+C, utracie port-forwardu lub awarii potraktuj przebieg jako
+przerwany. Zachowaj pliki i logi. Nie włączaj go do porównania jako pełnego
+pomiaru, nawet jeżeli część wyników wygląda prawidłowo.
+
+9. ZAPIS I SPRAWDZENIE WYNIKÓW
+
+    echo "runner_exit_code=$BF_EXIT"
+    cp -R "$BF_META" "$BF_RESULT/deployment"
+    kubectl --context "$BF_CONTEXT" -n beerfactory get pods -o json \
+      > "$BF_RESULT/deployment/pods-after.json"
+    kubectl --context "$BF_CONTEXT" -n beerfactory get events \
+      --sort-by=.metadata.creationTimestamp > "$BF_RESULT/deployment/kubernetes-events.txt"
+    kubectl --context "$BF_CONTEXT" -n beerfactory logs -l app=backend \
+      --all-containers=true --prefix --tail=3000 \
+      > "$BF_RESULT/deployment/backend.log"
+
+    python3 - <<'PY'
+import json, os, math
+from pathlib import Path
+p = Path(os.environ['BF_RESULT'])
+m = json.loads((p/'manifest.json').read_text())
+assert m['outcome'] == 'completed', m
+for name in ('events.jsonl','events.csv','orders.json','machine-samples.jsonl',
+             'summary.json','schedule.json','recipes.json','final-status.json'):
+    assert (p/name).is_file(), name
+assert math.isclose(m['measurement_end_h'] - m['measurement_start_h'], 2160)
+print('COMPLETE:', m['run_id'])
+PY
+
+Wymagamy kodu wyjścia runnera 0 oraz COMPLETE. Jeżeli runner nie utworzył
+katalogu wyników, zachowaj przynajmniej katalog _setup i komunikat błędu.
+Nie kopiuj nieistniejących plików i nie twórz ręcznie manifestu completed.
+
+    python3 src/experiment/analyse.py "$BF_RESULT"
+
+W katalogu wyników znajdziesz m.in.:
+- events.jsonl / events.csv: surowe zdarzenia partii;
+- machine-samples.jsonl: próbkowane stany maszyn;
+- orders.json: stan zamówień, również niedokończonych;
+- schedule.json: zaplanowane przyjścia zamówień;
+- manifest.json: parametry, granice pomiaru, wynik przebiegu, interwencje;
+- summary.json i summary.csv: podsumowanie produkcji i strat;
+- machine_intervals.csv oraz utilisation.json: udziały czasu stanów maszyn;
+- deployment/: dodatkowe dane o wdrożeniu, wersjach i logi.
+
+Sprawdź, czy nie było restartów, długich przerw łączności lub błędów API.
+WIP na końcu jest wynikiem eksperymentu; nie doprowadzaj partii do końca poza
+oknem i nie doliczaj ich do throughput. Udziały czasu są estymowane z próbek.
+Aktualny reducer nie wylicza jeszcze czasu realizacji zamówień ani przebiegu
+backlogu — nie przedstawiaj ich jako gotowych metryk z summary.csv.
+
+10. DRUGA POLITYKA — TA SAMA PROCEDURA, ŚWIEŻY KLASTER
+
+Po zachowaniu i sprawdzeniu plików pierwszego przebiegu zakończ port-forward:
+
+    kill "$BF_FORWARD_PID"
+
+Opcjonalnie usuń WYŁĄCZNIE zakończony klaster badawczy, aby zwolnić zasoby.
+To usuwa jego bazy i wolumeny. Lokalne wyniki w repozytorium pozostają.
+Przed poleceniem sprawdź nazwę; nie usuwaj beerfactory-test:
+
+    echo "$BF_CLUSTER"
+    kind delete cluster --name "$BF_CLUSTER"
+
+Następnie wykonaj sekcje 4–9 ponownie z parametrami:
+
+    export BF_POLICY=PUSH
+    export BF_TANKS=20
+    export BF_SEED=1
+    export BF_SCENARIO=src/experiment/scenarios/steady.json
+    export BF_RUN_ID=push-20-s1
+    export BF_CLUSTER=bf-push-20-s1
+    export BF_PORT=18089
+    export BF_CONTEXT="kind-${BF_CLUSTER}"
+    export BF_RESULT="src/experiment/results/${BF_RUN_ID}"
+    export BF_META="src/experiment/results/_setup/${BF_RUN_ID}"
+
+Zostaw te same obrazy i ten sam seed. Parametr --policy ustawia politykę
+przy /experiment/start; domyślne CONWIP w manifestach nie wymaga ręcznej zmiany.
+W PUSH podany WIP limit jest zapisywany, ale nie ogranicza przyjmowania partii.
+Nie uruchamiaj obu przebiegów jednocześnie na tym samym komputerze.
+
+11. PORÓWNANIE PARY
+
+Po obu udanych przebiegach:
+
+    python3 src/experiment/compare.py \
+      src/experiment/results/push-20-s1 \
+      src/experiment/results/conwip-20-s1 \
+      --output src/experiment/results/comparison-20-s1
+
+Wyniki:
+- paired-results.json: różnice CONWIP minus PUSH;
+- throughput.svg: wykres ukończonych partii na symulowaną dobę.
+
+Ujemna waste_difference_hl oznacza mniej zmarnowanych hL w CONWIP.
+Dodatnia throughput_difference oznacza więcej ukończonych partii na dobę.
+Compare sumuje całkowite straty; w scenariuszu z flushem interpretuj osobno
+spoiled i operator_discarded z summary. W steady bez ręcznych interwencji
+straty powinny pochodzić ze zepsucia.
+
+Jedna para nie daje przedziału ufności. Dla kolejnych seedów powtarzaj całą
+procedurę na świeżych klastrach, zmieniając SEED, RUN_ID, CLUSTER i wynikowe
+ścieżki. Podaj wszystkie pasujące katalogi do compare.py, np.:
+
+    python3 src/experiment/compare.py \
+      src/experiment/results/push-20-s1 src/experiment/results/conwip-20-s1 \
+      src/experiment/results/push-20-s2 src/experiment/results/conwip-20-s2 \
+      --output src/experiment/results/comparison-20
+
+Przed porównaniem sprawdź identyczne schedule.json i recipes.json w każdej
+parze oraz zgodne image-ids.txt, parametry i długość okna. Sam compare.py
+paruje po nazwie scenariusza, liczbie tanków i seedzie; nie kontroluje jeszcze
+wszystkich różnic wdrożenia. Nie łącz przebiegów po zmianie kodu lub protokołu.
+Nie umieszczaj pilotów --pilot w głównym porównaniu.
+
+12. 40 TANKÓW I DODATKOWE SCENARIUSZE
+
+Dla 40 tanków powtórz sekcje 4–11 z BF_TANKS=40 i nowymi nazwami, np.
+conwip-40-s1 / bf-conwip-40-s1 oraz push-40-s1 / bf-push-40-s1.
+Powstaną 45 maszyn: 40 unitanków i po jednej maszynie pozostałych pięciu typów.
+
+Pozostałe scenariusze wybierasz przez BF_SCENARIO:
+- src/experiment/scenarios/recipe-switch.json: zmiana popytu z Ale na Lager;
+- src/experiment/scenarios/reconfiguration.json: nowa receptura, jej zmiana,
+  pilne zamówienie, flush najstarszej aktywnej partii w unitanku i STOP/resume.
+
+Dodaj nazwę scenariusza do RUN_ID/CLUSTER, np. push-switch-20-s1.
+Dla każdej kombinacji ponownie wymagane są świeże dane. Jeśli zaplanowany
+flush nie znajdzie pasującej partii, runner zgłosi błąd zamiast udawać,
+że interwencja się odbyła. Zachowaj taki wynik jako problem scenariusza.
+
+13. DIAGNOSTYKA
+
+    kubectl --context "$BF_CONTEXT" -n beerfactory get pods,pvc
+    kubectl --context "$BF_CONTEXT" -n beerfactory logs \
+      deployment/backend --tail=150
+    kubectl --context "$BF_CONTEXT" -n beerfactory describe pod unitank-0
+    cat "$BF_META/port-forward.log"
+    cat "$BF_RESULT/manifest.json"
+
+ImagePullBackOff: sprawdź, czy załadowano wszystkie cztery obrazy :dev do
+właściwego klastra kind. Pending/PVC: sprawdź StorageClass, miejsce i zasoby.
+Błąd konwersji REDIS_PORT tcp://...: używasz starego obrazu lub manifestu;
+wróć do aktualnego kodu i odbuduj obrazy dla nowej serii.
+"Expected 20 online tanks": poczekaj na gotowość maszyn i sprawdź profil.
+"Factory has a STOP latch": nie resetuj go w ciemno na używanej fabryce;
+pomiar ma zaczynać się na świeżym klastrze.
+
+Nie naprawiaj środowiska w trakcie pomiaru, a potem nie opisuj go jako
+nieprzerwanego przebiegu. Zachowaj błąd, przyczynę oraz osobną próbę naprawczą.
+
+14. ARCHIWIZACJA I STAN WERYFIKACJI
+
+src/experiment/results/ jest ignorowany przez Git. Push kodu nie zapisuje
+wyników. Przed usunięciem klastrów zachowaj kopię wyników poza tym komputerem
+lub dołącz wybrany zestaw do uzgodnionego archiwum projektu. Do raportu używaj
+rzeczywiście zebranych danych, wersji obrazów i opisu warunków pomiaru.
+
+Dotychczas potwierdzono smoke całej linii na Kubernetes oraz model UPPAAL.
+Pełna seria efficiency nie została jeszcze wykonana. Skrypty nie są dowodem
+przewagi którejkolwiek polityki. Test 24-godzinnej dostępności i rollout
+podczas produkcji to osobne eksperymenty, opisane w README.md.
