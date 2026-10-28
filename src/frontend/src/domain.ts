@@ -1,6 +1,7 @@
 import { INGREDIENTS, STAGES } from "./types.ts";
 import type { Machine, Recipe, Telemetry } from "./types.ts";
 
+/** Choose visual severity: stale/offline status and faults outrank retained process progress. */
 export function machineTone(machine: Machine): string {
   if (!machine.online) return "offline";
   if (
@@ -16,6 +17,7 @@ export function machineTone(machine: Machine): string {
   return "idle";
 }
 
+/** Describe inhibition independently from the machine operation that remains paused underneath it. */
 export function machineLabel(machine: Machine): string {
   if (!machine.online) return "Offline";
   if (machine.local_stop) return "Local STOP";
@@ -24,6 +26,7 @@ export function machineLabel(machine: Machine): string {
   return humanize(machine.state);
 }
 
+/** Translate protocol enum spelling into a readable label without changing the domain value. */
 export function humanize(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "Unknown";
   return String(value)
@@ -32,6 +35,7 @@ export function humanize(value: string | number | null | undefined): string {
     .replace(/^./, (c) => c.toUpperCase());
 }
 
+/** Clamp phase progress for rendering; empty or incomplete snapshots have no measurable progress. */
 export function progress(machine: Machine): number {
   const duration = Number(machine.phase_duration_h);
   const elapsed = Number(machine.phase_elapsed_h);
@@ -40,6 +44,7 @@ export function progress(machine: Machine): number {
   return Math.max(0, Math.min(100, (elapsed / duration) * 100));
 }
 
+/** Format simulated hours, including deadlines that have already expired. */
 export function duration(hours: number | null | undefined): string {
   if (hours === null || hours === undefined || !Number.isFinite(hours))
     return "—";
@@ -49,6 +54,7 @@ export function duration(hours: number | null | undefined): string {
   return `${(hours / 24).toFixed(1)} d`;
 }
 
+/** Display the simulation clock as day and time; this is not the wall clock. */
 export function simClock(hours: number | undefined): string {
   if (hours === undefined || !Number.isFinite(hours)) return "Awaiting clock";
   const day = Math.floor(hours / 24) + 1;
@@ -61,6 +67,7 @@ export function simClock(hours: number | undefined): string {
   return `Day ${day} · ${hour}:${minute}`;
 }
 
+/** Check editor invariants before submission; the backend remains the authoritative validator. */
 export function validateRecipe(recipe: unknown): string | null {
   if (!recipe || typeof recipe !== "object" || Array.isArray(recipe))
     return "Recipe must be a JSON object.";
@@ -125,10 +132,12 @@ export function validateRecipe(recipe: unknown): string | null {
   return null;
 }
 
+/** Accept numeric quantities only; strings, booleans and nonfinite values are not ingredient amounts. */
 function finiteNonnegative(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
+/** Deduplicate replayed/live samples, select one sensor and return chronological chart input. */
 export function orderedSamples(
   samples: Telemetry[],
   machineId: string,
@@ -152,6 +161,7 @@ export function orderedSamples(
   );
 }
 
+/** Build an editable six-stage definition; fermentation and maturation share one unitank stage. */
 export function newRecipe(): Recipe {
   return {
     id: "new-ale",
@@ -189,6 +199,7 @@ export function newRecipe(): Recipe {
   };
 }
 
+/** Accept numeric backend stage indices as well as named stage values when rendering a batch trace. */
 export function stageLabel(stage: string | number): string {
   const key = typeof stage === "number" ? STAGES[stage] : stage;
   return key ? humanize(key) : "Unknown";

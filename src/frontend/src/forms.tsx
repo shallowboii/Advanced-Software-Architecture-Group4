@@ -4,8 +4,9 @@ import { newRecipe, validateRecipe, humanize } from "./domain";
 import { NumberField } from "./ui";
 import { INGREDIENTS, STAGE_LABEL } from "./types";
 import type { Recipe } from "./types";
-import type { Perform } from "./Views";
+import type { Perform } from "./actions";
 
+/** Submit recipe demand in fixed 50 hL batches; successful submission closes the form. */
 export function OrderForm({
   recipes,
   perform,
@@ -102,6 +103,7 @@ export function OrderForm({
   );
 }
 
+/** Edit a detached recipe copy and publish a new immutable version without changing active batches. */
 export function RecipeForm({
   recipe,
   perform,
@@ -118,6 +120,7 @@ export function RecipeForm({
   );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Replace only the edited phase in this draft, never mutate a polled recipe.
   const updatePhase = (
     stageIndex: number,
     phaseIndex: number,

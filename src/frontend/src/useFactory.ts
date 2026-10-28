@@ -23,6 +23,11 @@ const endpoints = {
   experiment: "/experiment/status",
 } as const;
 
+/** Keep the dashboard synchronized without making WebSocket delivery authoritative.
+ * REST refreshes supply complete snapshots every three seconds. WebSocket events
+ * trigger quicker refreshes and feed a bounded chart buffer. A failed endpoint
+ * retains its last value and records an error; only fresh machine AND line data
+ * advance lastUpdate, which the app uses to inhibit stale operator actions. */
 export function useFactory() {
   const [data, setData] = useState<FactorySnapshot>(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -35,6 +40,7 @@ export function useFactory() {
   const loading = useRef(false);
   const queued = useRef(false);
 
+  // Coalesce overlapping timer/event requests into one follow-up snapshot fetch.
   const refresh = useCallback(async () => {
     if (loading.current) {
       queued.current = true;
@@ -80,6 +86,8 @@ export function useFactory() {
   }, []);
 
   useEffect(() => {
+    // Per-effect lifetime prevents an old socket from reconnecting after unmount
+    // or React StrictMode's development teardown/restart cycle.
     let disposed = false;
     alive.current = true;
     void refresh();
@@ -90,6 +98,7 @@ export function useFactory() {
     let reconnect: number | undefined;
     let updateTimer: number | undefined;
     let attempts = 0;
+    // Reconnect with capped backoff while independent REST polling continues.
     const connect = () => {
       if (disposed) return;
       const current = new WebSocket(

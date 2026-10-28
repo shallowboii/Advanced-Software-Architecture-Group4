@@ -1,3 +1,4 @@
+/** Browser-facing shapes from contracts/PROTOCOL.md; the backend owns domain state. */
 export const STAGES = [
   "mash",
   "lauter",
@@ -22,15 +23,16 @@ export const INGREDIENTS = [
   "water_l",
 ] as const;
 export type Ingredients = Record<(typeof INGREDIENTS)[number], number>;
+/**
+ * Backend projection combining physical state with centrally tracked production.
+ * Batch, recipe and transfer mappings below do not imply controller knowledge of
+ * those business concepts; the scheduler supplies them for this operator view.
+ */
 export interface Machine {
   machine_id: string;
   type: MachineType;
   state: string;
   online: boolean;
-  batch_id: string | null;
-  execution_id?: string | null;
-  transfer_id?: string | null;
-  recipe_version_id?: string | null;
   phase: string | null;
   phase_index?: number;
   phase_elapsed_h: number;
@@ -44,18 +46,26 @@ export interface Machine {
   last_seen?: string;
   epoch?: number;
   state_version?: number;
+  // Central scheduler mappings, used for labels and batch-scoped operator actions.
+  batch_id: string | null;
+  execution_id?: string | null;
+  transfer_id?: string | null;
+  recipe_version_id?: string | null;
 }
+/** One timed operation within a machine stage. */
 export interface Phase {
   name: string;
   duration_h: number;
   target_temp_c: number;
 }
+/** One machine type and its ordered phases, hold and interruption limits. */
 export interface Stage {
   type: MachineType;
   phases: Phase[];
   hold_h: number | null;
   max_pause_h: number;
 }
+/** Immutable brewing definition copied into each admitted batch. */
 export interface Recipe {
   id: string;
   name: string;
@@ -67,6 +77,7 @@ export interface Recipe {
   transfer_h: number;
   flush_h: number;
 }
+/** Requested demand and progress counters across its batches. */
 export interface Order {
   id: string;
   recipe_id: string;
@@ -77,6 +88,7 @@ export interface Order {
   priority: number;
   status: string;
 }
+/** One fixed-volume production unit with its selected recipe version. */
 export interface Batch {
   id: string;
   order_id: string;
@@ -90,6 +102,7 @@ export interface Batch {
   completed_at?: string | null;
   run_id?: string;
 }
+/** Canonical history event used for activity feeds and batch traces. */
 export interface ProductionEvent {
   event_id: string;
   event: string;
@@ -101,6 +114,7 @@ export interface ProductionEvent {
   reason?: string;
   snapshot?: Partial<Machine>;
 }
+/** One sensor measurement; it is not an acknowledgement of a command. */
 export interface Telemetry {
   event_id?: string;
   machine_id: string;
@@ -112,6 +126,7 @@ export interface Telemetry {
   ts_utc: string;
   sim_time_h?: number;
 }
+/** Scheduler policy and global stop status for the production line. */
 export interface Line {
   stopped: boolean;
   policy: string;
@@ -120,6 +135,7 @@ export interface Line {
   sim_time_h: number;
   machines_pending_stop: string[] | number;
 }
+/** Counters scoped to the current experiment run. */
 export interface Experiment {
   run_id: string | null;
   policy: string;
@@ -133,6 +149,7 @@ export interface Experiment {
   sim_clock_h: number;
   done: boolean;
 }
+/** Latest successfully fetched data for each dashboard resource. */
 export interface FactorySnapshot {
   machines: Machine[];
   recipes: Recipe[];

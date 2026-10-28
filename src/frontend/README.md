@@ -31,3 +31,28 @@ npm run build
 ```
 
 Tests exercise status precedence, bounded progress, recipe invariants, telemetry deduplication and simulation time formatting. The production build checks TypeScript and bundles the application. A running backend is required to exercise end-to-end operator flows. The SVG telemetry chart is implemented locally without a charting dependency; it provides accessible sample count, minimum and maximum descriptions.
+
+## Reading the code
+
+The frontend is a client of the backend HTTP/WebSocket API. It does not schedule batches, consume MQTT/Kafka or decide transfer ownership. The scheduler owns orders, batches, recipes and their machine mappings. A physical controller knows its local operation and measurements; it does not know a batch, recipe or order. The machine records displayed here are enriched backend projections combining physical state with centrally maintained production information.
+
+| Module | Responsibility |
+| --- | --- |
+| `src/App.tsx` | Navigation, selected machine/batch and explicit operator confirmations. |
+| `src/useFactory.ts` | REST snapshots, endpoint errors, WebSocket reconnection and the live sample buffer. |
+| `src/useCommands.ts` | Pending command count, outcome notices and retries with the original key/body/operator. |
+| `src/api.ts` | Same-origin HTTP transport and structured error conversion. |
+| `src/actions.ts` | Shared action/confirmation callback types, keeping views independent of retry implementation. |
+| `src/Operations.tsx` | Six-stage overview and the registered 20/40 uni-tank grid. |
+| `src/MachineDialog.tsx` | Inspection and local controls for one machine. |
+| `src/views/` | Separate order, recipe, inventory, experiment and history screens; shared event table/chart. |
+| `src/forms.tsx` | Order entry and editing detached recipe drafts. |
+| `src/domain.ts` | Pure presentation rules, recipe validation, simulation-time formatting and sample deduplication. |
+| `src/types.ts` | TypeScript representations of the shared API contract. |
+| `src/ui.tsx` | Accessible dialogs, input fields and small shared presentation elements. |
+
+A typical action starts in a form or confirmation, calls `perform`, and receives a request ID in `useCommands`. A successful response schedules a fresh snapshot; the UI does not assume that a controller has already completed the operation. An uncertain result keeps the original request for retry. Normal actions remain inhibited while it is unresolved; global STOP remains available.
+
+Telemetry takes a separate path: `useFactory` collects a bounded WebSocket buffer, and `HistoryView` requests the latest persisted samples with `order=desc`. `orderedSamples` merges and deduplicates them before sorting by timestamp for the chart. Sensor readings are observations, not command acknowledgements.
+
+The inventory screen displays a Python in-memory mock. Its stock and idempotency records reset when that service restarts. Restarting inventory alone does not reconcile the retained backend batches; use a fresh experiment instead of treating those stock values as recovered production accounting.

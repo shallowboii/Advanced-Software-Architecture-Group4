@@ -1,26 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { ApiError, errorMessage, mutation } from "./api";
-import {
-  machineLabel,
-  machineTone,
-  progress,
-  duration,
-  humanize,
-  simClock,
-} from "./domain";
+import { humanize, simClock } from "./domain";
+import { MachineDialog } from "./MachineDialog";
 import { useFactory } from "./useFactory";
+import { useCommands } from "./useCommands";
 import { Operations } from "./Operations";
-import {
-  BatchHistory,
-  ExperimentView,
-  HistoryView,
-  InventoryView,
-  OrdersView,
-  RecipesView,
-} from "./Views";
-import type { Confirm, Perform } from "./Views";
+import { BatchHistory } from "./views/BatchHistory";
+import { ExperimentView } from "./views/ExperimentView";
+import { HistoryView } from "./views/HistoryView";
+import { InventoryView } from "./views/InventoryView";
+import { OrdersView } from "./views/OrdersView";
+import { RecipesView } from "./views/RecipesView";
+import type { Confirm } from "./actions";
 import { OrderForm, RecipeForm } from "./forms";
-import { Dialog, Icon, timestamp } from "./ui";
+import { Dialog, Icon } from "./ui";
 import type { Recipe } from "./types";
 
 type Tab =
@@ -33,13 +25,6 @@ const tabs: { id: Tab; label: string; icon: string }[] = [
   { id: "inventory", label: "Inventory", icon: "box" },
   { id: "experiments", label: "Experiments", icon: "experiment" },
 ];
-interface PendingRequest {
-  path: string;
-  body: unknown;
-  success: string;
-  operator: string;
-  key: string;
-}
 interface Confirmation {
   title: string;
   message: string;
@@ -48,6 +33,12 @@ interface Confirmation {
   destructive: boolean;
 }
 
+/**
+ * Compose workspace screens and own selection/confirmation state.
+ * The browser requests actions; backend snapshots remain authoritative for
+ * production and STOP acknowledgements. Global STOP bypasses the normal stale
+ * data and retry guard so an operator can still request inhibition.
+ */
 export default function App() {
   const { data, errors, lastUpdate, connection, telemetry, refresh } =
     useFactory();
@@ -67,12 +58,19 @@ export default function App() {
   const [machineId, setMachineId] = useState<string | null>(null);
   const [batchId, setBatchId] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
-  const [busy, setBusy] = useState(0);
   const [confirming, setConfirming] = useState(false);
-  const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(
-    null,
+  const { busy, notice, setNotice, retries, execute, perform } = useCommands(
+    operator,
+    () => {
+      void refresh();
+    },
+    () => {
+      // Leave modal forms so the retained request can be retried from the banner.
+      setOrderOpen(false);
+      setRecipeEdit(null);
+      setConfirmation(null);
+    },
   );
-  const [retries, setRetries] = useState<PendingRequest[]>([]);
   const toastRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -104,42 +102,6 @@ export default function App() {
     ? data.line.machines_pending_stop.length
     : (data.line?.machines_pending_stop ?? 0);
 
-  async function execute(command: PendingRequest): Promise<boolean> {
-    setBusy((value) => value + 1);
-    try {
-      await mutation(command.path, command.body, command.operator, command.key);
-      setRetries((previous) =>
-        previous.filter((item) => item.key !== command.key),
-      );
-      setNotice({ text: command.success, error: false });
-      void refresh();
-      return true;
-    } catch (error) {
-      const uncertain = !(error instanceof ApiError) || error.status >= 500;
-      if (uncertain) {
-        setRetries((previous) =>
-          previous.some((item) => item.key === command.key)
-            ? previous
-            : [...previous, command],
-        );
-        setOrderOpen(false);
-        setRecipeEdit(null);
-        setConfirmation(null);
-      } else
-        setRetries((previous) =>
-          previous.filter((item) => item.key !== command.key),
-        );
-      setNotice({
-        text: `${errorMessage(error)}${uncertain ? " Use Retry to safely repeat this exact operation." : ""}`,
-        error: true,
-      });
-      return false;
-    } finally {
-      setBusy((value) => value - 1);
-    }
-  }
-  const perform: Perform = (path, body, success) =>
-    execute({ path, body, success, operator, key: crypto.randomUUID() });
   const confirm: Confirm = (
     title,
     message,
@@ -147,6 +109,7 @@ export default function App() {
     action,
     destructive = false,
   ) => setConfirmation({ title, message, label, action, destructive });
+  /** Capture the batch now, so a later confirmation cannot target replacement beer. */
   const flushMachine = () => {
     if (!selectedMachine?.batch_id) return;
     const machine = selectedMachine,
@@ -448,133 +411,13 @@ export default function App() {
         </Dialog>
       )}
       {selectedMachine && (
-        <Dialog
-          title={selectedMachine.machine_id}
-          description="Machine status and operator controls"
+        <MachineDialog
+          machine={selectedMachine}
+          canAct={canAct}
+          perform={perform}
           onClose={() => setMachineId(null)}
-          sheet
-        >
-          <div className="machine-detail-header">
-            <span className={`quiet-tag ${machineTone(selectedMachine)}`}>
-              <i className="status-dot" />
-              {machineLabel(selectedMachine)}
-            </span>
-            <span>{humanize(selectedMachine.type)} · 50 hL</span>
-          </div>
-          <div className="machine-phase">
-            <div>
-              <span>Current phase</span>
-              <strong>
-                {selectedMachine.phase
-                  ? humanize(selectedMachine.phase)
-                  : "No active phase"}
-              </strong>
-            </div>
-            <strong>{Math.round(progress(selectedMachine))}%</strong>
-          </div>
-          <div className="progress-track large">
-            <span style={{ width: `${progress(selectedMachine)}%` }} />
-          </div>
-          <dl className="detail-list">
-            <div>
-              <dt>Batch</dt>
-              <dd className="mono">{selectedMachine.batch_id ?? "Empty"}</dd>
-            </div>
-            <div>
-              <dt>State</dt>
-              <dd>{humanize(selectedMachine.state)}</dd>
-            </div>
-            <div>
-              <dt>Phase time remaining</dt>
-              <dd>
-                {duration(
-                  Math.max(
-                    0,
-                    selectedMachine.phase_duration_h -
-                      selectedMachine.phase_elapsed_h,
-                  ),
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>Holding deadline</dt>
-              <dd>
-                {selectedMachine.hold_deadline_h
-                  ? duration(
-                      selectedMachine.hold_deadline_h -
-                        selectedMachine.sim_time_h,
-                    )
-                  : "Not holding"}
-              </dd>
-            </div>
-            <div>
-              <dt>Recipe version</dt>
-              <dd className="mono">
-                {selectedMachine.recipe_version_id ?? "None"}
-              </dd>
-            </div>
-            <div>
-              <dt>Transfer</dt>
-              <dd className="mono">
-                {selectedMachine.transfer_id ?? "No transfer"}
-              </dd>
-            </div>
-            <div>
-              <dt>Last seen</dt>
-              <dd>{timestamp(selectedMachine.last_seen)}</dd>
-            </div>
-          </dl>
-          <p className="form-note">
-            STOP retains the batch. Resume clears the local STOP; global STOP
-            must be released separately.
-          </p>
-          <div className="machine-actions">
-            <button
-              className="button danger-outline"
-              disabled={
-                !canAct || !selectedMachine.online || selectedMachine.local_stop
-              }
-              onClick={() =>
-                void perform(
-                  `/machines/${encodeURIComponent(selectedMachine.machine_id)}/stop`,
-                  {},
-                  `${selectedMachine.machine_id}: local STOP requested.`,
-                )
-              }
-            >
-              <Icon name="stop" />
-              Stop machine
-            </button>
-            <button
-              className="button secondary"
-              disabled={
-                !canAct ||
-                !selectedMachine.online ||
-                !selectedMachine.local_stop
-              }
-              onClick={() =>
-                void perform(
-                  `/machines/${encodeURIComponent(selectedMachine.machine_id)}/resume`,
-                  {},
-                  `${selectedMachine.machine_id}: resume requested.`,
-                )
-              }
-            >
-              <Icon name="play" />
-              Resume machine
-            </button>
-            <button
-              className="button danger-outline full"
-              disabled={
-                !canAct || !selectedMachine.batch_id || !selectedMachine.online
-              }
-              onClick={flushMachine}
-            >
-              <Icon name="drop" />
-              Flush selected batch
-            </button>
-          </div>
-        </Dialog>
+          onFlush={flushMachine}
+        />
       )}
       {selectedBatch && (
         <Dialog

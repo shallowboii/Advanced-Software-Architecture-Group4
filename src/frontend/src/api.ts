@@ -1,3 +1,4 @@
+/** A server response rejected or could not describe an API operation; keep its status for retry policy. */
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -8,6 +9,7 @@ export class ApiError extends Error {
   }
 }
 
+/** Call the same-origin backend API, decode JSON and bound requests that do not supply a cancellation signal. */
 export async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -38,6 +40,7 @@ export async function request<T>(
   return data as T;
 }
 
+/** Send an operator command with the caller-owned retry key and audit label. */
 export function mutation<T>(
   path: string,
   body: unknown,
@@ -55,6 +58,7 @@ export function mutation<T>(
   });
 }
 
+/** Turn transport and API failures into messages that preserve uncertainty about command outcomes. */
 export function errorMessage(error: unknown): string {
   if (error instanceof DOMException && error.name === "TimeoutError")
     return "The request timed out. Its outcome is unknown; retry with the same request ID.";

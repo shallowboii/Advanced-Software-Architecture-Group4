@@ -10,6 +10,7 @@ import { Empty, Icon, shortId, timestamp } from "./ui";
 import { STAGES, STAGE_LABEL } from "./types";
 import type { FactorySnapshot, Machine } from "./types";
 
+/** Summarize the six-stage line and render each registered unitank from authoritative snapshots. */
 export function Operations({
   data,
   selectMachine,
@@ -307,6 +308,7 @@ export function Operations({
   );
 }
 
+/** Present a production counter with the context needed to interpret its scope. */
 function Metric({
   label,
   value,
@@ -332,6 +334,7 @@ function Metric({
   );
 }
 
+/** Show one vessel, its retained batch phase and inhibition state, and open machine inspection. */
 function Tank({
   machine,
   onSelect,

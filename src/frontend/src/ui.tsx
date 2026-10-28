@@ -72,6 +72,7 @@ const paths: Record<string, ReactNode> = {
   ),
 };
 
+/** Render local SVG symbols without loading third-party assets or altering button accessible names. */
 export function Icon({ name, size = 18 }: { name: string; size?: number }) {
   return (
     <svg
@@ -90,6 +91,7 @@ export function Icon({ name, size = 18 }: { name: string; size?: number }) {
   );
 }
 
+/** Explain a missing-data state without inventing production values. */
 export function Empty({
   title,
   children,
@@ -108,6 +110,7 @@ export function Empty({
   );
 }
 
+/** Use a native modal for focus containment and explicit escape/close handling. */
 export function Dialog({
   title,
   description,
@@ -156,6 +159,7 @@ export function Dialog({
   );
 }
 
+/** Share numeric entry rules; a blank field remains invalid instead of silently becoming zero. */
 export function NumberField({
   label,
   value,
@@ -196,6 +200,7 @@ export function NumberField({
   );
 }
 
+/** Render recorded wall-clock timestamps and distinguish missing values from an actual date. */
 export function timestamp(value: string | undefined): string {
   if (!value || !Number.isFinite(Date.parse(value))) return "Not recorded";
   return new Date(value).toLocaleString(undefined, {
@@ -207,6 +212,7 @@ export function timestamp(value: string | undefined): string {
   });
 }
 
+/** Abbreviate long display identifiers; callers retain the original ID for actions and tooltips. */
 export function shortId(value: string | null | undefined): string {
   if (!value) return "None";
   return value.length > 18 ? `${value.slice(0, 8)}…${value.slice(-4)}` : value;
