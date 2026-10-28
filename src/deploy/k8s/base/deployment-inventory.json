@@ -1,6 +1,6 @@
 {
   "apiVersion": "apps/v1",
-  "kind": "StatefulSet",
+  "kind": "Deployment",
   "metadata": {
     "name": "inventory"
   },
@@ -33,10 +33,6 @@
                 "value": "8081"
               },
               {
-                "name": "INVENTORY_STATE_FILE",
-                "value": "/data/inventory.json"
-              },
-              {
                 "name": "INITIAL_BATCHES",
                 "value": "1000"
               }
@@ -56,39 +52,15 @@
               },
               "initialDelaySeconds": 5,
               "periodSeconds": 5
-            },
-            "volumeMounts": [
-              {
-                "name": "data",
-                "mountPath": "/data"
-              }
-            ]
+            }
           }
         ],
         "volumes": [],
-        "terminationGracePeriodSeconds": 30,
-        "securityContext": {
-          "fsGroup": 10001
-        }
+        "terminationGracePeriodSeconds": 30
       }
     },
-    "serviceName": "inventory",
-    "volumeClaimTemplates": [
-      {
-        "metadata": {
-          "name": "data"
-        },
-        "spec": {
-          "accessModes": [
-            "ReadWriteOnce"
-          ],
-          "resources": {
-            "requests": {
-              "storage": "2Gi"
-            }
-          }
-        }
-      }
-    ]
+    "strategy": {
+      "type": "Recreate"
+    }
   }
 }

@@ -91,12 +91,8 @@
       "image": "beerfactory-inventory:local",
       "environment": {
         "PORT": "8081",
-        "INVENTORY_STATE_FILE": "/data/inventory.json",
         "INITIAL_BATCHES": "1000"
       },
-      "volumes": [
-        "inventory-data:/data"
-      ],
       "restart": "unless-stopped"
     },
     "backend": {
@@ -173,13 +169,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "mash",
         "MACHINE_ID": "mash-0",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "mash-0-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -205,13 +197,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "lauter",
         "MACHINE_ID": "lauter-0",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "lauter-0-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -237,13 +225,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "kettle",
         "MACHINE_ID": "kettle-0",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "kettle-0-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -269,13 +253,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "whirlpool",
         "MACHINE_ID": "whirlpool-0",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "whirlpool-0-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -301,13 +281,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-0",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-0-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -333,13 +309,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "filter",
         "MACHINE_ID": "filter-0",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "filter-0-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -354,13 +326,6 @@
   "volumes": {
     "postgres-data": {},
     "rabbitmq-data": {},
-    "kafka-data": {},
-    "inventory-data": {},
-    "mash-0-data": {},
-    "lauter-0-data": {},
-    "kettle-0-data": {},
-    "whirlpool-0-data": {},
-    "unitank-0-data": {},
-    "filter-0-data": {}
+    "kafka-data": {}
   }
 }

@@ -36,8 +36,9 @@ jobs:
           cache: npm
           cache-dependency-path: src/frontend/package-lock.json
       - name: Install C dependencies
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libpaho-mqtt-dev libcjson-dev librdkafka-dev
+        run: sudo apt-get update && sudo apt-get install -y libpaho-mqtt-dev libcjson-dev librdkafka-dev
       - run: make test
+      - run: make -C src/machine check-wire
       - run: make -C src/machine all
       - run: mvn -B -f src/backend/pom.xml verify
         env:

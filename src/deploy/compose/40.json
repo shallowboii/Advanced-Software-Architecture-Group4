@@ -91,12 +91,8 @@
       "image": "beerfactory-inventory:local",
       "environment": {
         "PORT": "8081",
-        "INVENTORY_STATE_FILE": "/data/inventory.json",
         "INITIAL_BATCHES": "1000"
       },
-      "volumes": [
-        "inventory-data:/data"
-      ],
       "restart": "unless-stopped"
     },
     "backend": {
@@ -173,13 +169,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "mash",
         "MACHINE_ID": "mash-0",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "mash-0-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -205,13 +197,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "lauter",
         "MACHINE_ID": "lauter-0",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "lauter-0-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -237,13 +225,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "kettle",
         "MACHINE_ID": "kettle-0",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "kettle-0-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -269,13 +253,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "whirlpool",
         "MACHINE_ID": "whirlpool-0",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "whirlpool-0-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -301,13 +281,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-0",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-0-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -333,13 +309,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-1",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-1-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -365,13 +337,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-2",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-2-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -397,13 +365,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-3",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-3-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -429,13 +393,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-4",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-4-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -461,13 +421,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-5",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-5-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -493,13 +449,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-6",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-6-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -525,13 +477,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-7",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-7-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -557,13 +505,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-8",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-8-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -589,13 +533,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-9",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-9-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -621,13 +561,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-10",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-10-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -653,13 +589,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-11",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-11-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -685,13 +617,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-12",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-12-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -717,13 +645,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-13",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-13-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -749,13 +673,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-14",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-14-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -781,13 +701,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-15",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-15-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -813,13 +729,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-16",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-16-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -845,13 +757,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-17",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-17-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -877,13 +785,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-18",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-18-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -909,13 +813,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-19",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-19-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -941,13 +841,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-20",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-20-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -973,13 +869,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-21",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-21-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1005,13 +897,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-22",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-22-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1037,13 +925,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-23",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-23-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1069,13 +953,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-24",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-24-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1101,13 +981,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-25",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-25-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1133,13 +1009,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-26",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-26-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1165,13 +1037,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-27",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-27-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1197,13 +1065,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-28",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-28-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1229,13 +1093,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-29",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-29-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1261,13 +1121,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-30",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-30-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1293,13 +1149,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-31",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-31-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1325,13 +1177,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-32",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-32-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1357,13 +1205,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-33",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-33-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1389,13 +1233,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-34",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-34-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1421,13 +1261,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-35",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-35-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1453,13 +1289,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-36",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-36-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1485,13 +1317,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-37",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-37-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1517,13 +1345,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-38",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-38-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1549,13 +1373,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "unitank",
         "MACHINE_ID": "unitank-39",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "unitank-39-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1581,13 +1401,9 @@
         "TIME_SCALE": "2",
         "MACHINE_TYPE": "filter",
         "MACHINE_ID": "filter-0",
-        "STATE_DB": "/data/machine.db",
         "SOCKET_PATH": "/tmp/machine.sock",
         "FLUSH_H": "0.1"
       },
-      "volumes": [
-        "filter-0-data:/data"
-      ],
       "depends_on": {
         "rabbitmq": {
           "condition": "service_healthy"
@@ -1602,52 +1418,6 @@
   "volumes": {
     "postgres-data": {},
     "rabbitmq-data": {},
-    "kafka-data": {},
-    "inventory-data": {},
-    "mash-0-data": {},
-    "lauter-0-data": {},
-    "kettle-0-data": {},
-    "whirlpool-0-data": {},
-    "unitank-0-data": {},
-    "unitank-1-data": {},
-    "unitank-2-data": {},
-    "unitank-3-data": {},
-    "unitank-4-data": {},
-    "unitank-5-data": {},
-    "unitank-6-data": {},
-    "unitank-7-data": {},
-    "unitank-8-data": {},
-    "unitank-9-data": {},
-    "unitank-10-data": {},
-    "unitank-11-data": {},
-    "unitank-12-data": {},
-    "unitank-13-data": {},
-    "unitank-14-data": {},
-    "unitank-15-data": {},
-    "unitank-16-data": {},
-    "unitank-17-data": {},
-    "unitank-18-data": {},
-    "unitank-19-data": {},
-    "unitank-20-data": {},
-    "unitank-21-data": {},
-    "unitank-22-data": {},
-    "unitank-23-data": {},
-    "unitank-24-data": {},
-    "unitank-25-data": {},
-    "unitank-26-data": {},
-    "unitank-27-data": {},
-    "unitank-28-data": {},
-    "unitank-29-data": {},
-    "unitank-30-data": {},
-    "unitank-31-data": {},
-    "unitank-32-data": {},
-    "unitank-33-data": {},
-    "unitank-34-data": {},
-    "unitank-35-data": {},
-    "unitank-36-data": {},
-    "unitank-37-data": {},
-    "unitank-38-data": {},
-    "unitank-39-data": {},
-    "filter-0-data": {}
+    "kafka-data": {}
   }
 }

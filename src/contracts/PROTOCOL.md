@@ -1,55 +1,63 @@
-# Beer Factory protocol version 1
+# Beer Factory equipment protocol version 2
 
-This is the shared implementation contract. Changes require updating every producer, consumer and fixture.
+The scheduler knows the beer. Controllers know only equipment state and technical commands. This is a breaking replacement for the previous batch-aware protocol: use matching backend/controller images in a fresh factory.
 
-## Identity and time
+## Identity, correlation and time
 
-Machine types, in order: `mash`, `lauter`, `kettle`, `whirlpool`, `unitank`, `filter`. IDs are `<type>-<ordinal>`. Every batch is 50 hL. No buffers or cleaning. A uni-tank executes fermentation and maturation without releasing the batch between phases.
+Machine types are `mash`, `lauter`, `kettle`, `whirlpool`, `unitank`, `filter`; instance IDs are `<type>-<ordinal>`. A controller knows its type and physical occupancy, but no batch, order, recipe, phase name, run or business transfer ID. The scheduler stores those mappings in PostgreSQL. It also sequences fermentation and maturation in the same unitank.
 
-JSON uses snake_case. Envelope: `schema_version:1`, `message_id`, `machine_id`, `batch_id` (nullable), `execution_id` (nullable), `transfer_id` (nullable), `recipe_version_id` (nullable), `run_id` (nullable), `ts_utc`, `sim_time_h`.
+JSON uses snake_case and `schema_version:2`. MQTT topics remain `factory/<type>/<id>/cmd`, `heartbeat`, `events`, `ack`, with `factory/line/control` for global STOP. Commands/events/acks use QoS 1, heartbeats QoS 0. Commands are never retained. An acknowledgement of broker delivery is not an acknowledgement of actuator completion.
 
-MQTT topics: `factory/<type>/<id>/cmd`, `heartbeat`, `events`, `ack`. Commands/events/acks use QoS 1; heartbeat QoS 0. Global commands use exact subscription `factory/line/control`. Executable commands are never retained. Commands have `command_id`, `cmd`, `epoch` (monotonically increasing coordinator fencing token). Critical events have `event_id`, `event`, `machine_sequence`, `controller_boot_id`; backend acks with `{event_id}`. Replay until acknowledged; backend deduplicates by event_id. Persist commands before acknowledging. Broker delivery alone is not execution acknowledgement.
+`command_id` identifies an actual technical instruction and supports same-process retry deduplication. `controller_boot_id` identifies one controller process. `epoch` fences old coordinator leaders. Material commands also carry `expected_state_version`, so a delayed command cannot affect a later equipment operation. Check duplicate IDs before checking the state guard. Neither correlation field identifies beer.
 
-`TIME_SCALE` means real seconds per simulated hour. PERMIT carries authoritative `sim_time_h` and `time_scale`. A controller extrapolates using monotonic time. Holding/ageing continues during STOP. Processing/transfer/flush progress pauses. Heartbeat defaults to 2 real seconds, permit expiry to 3 real seconds. All expiry limits are checked locally, including while stopped.
+`TIME_SCALE` is real seconds per simulated hour. PERMIT supplies the simulation clock mapping. Technical operation progress pauses during STOP or permit loss. The scheduler alone tracks material age, holding limits, phase deadlines and spoilage. The clock continues during STOP. Default heartbeat interval is two real seconds and permit lifetime is three.
 
-## Controller commands
+## Commands
 
-All targeted commands include machine_id. PERMIT and STOP bypass normal state guards; stale epochs cannot re-enable a machine. Command retries use the same ID.
+Network commands include `schema_version,command_id,cmd,epoch`. Targeted actuator commands additionally require `machine_id,controller_boot_id,expected_state_version`. The schema forbids unknown fields, including business identifiers. Retry the same instruction with its original command ID.
 
-| cmd | Payload and behaviour |
+| cmd | Technical payload and behaviour |
 | --- | --- |
-| PERMIT | `permit_ms:3000, sim_time_h, time_scale`; establishes epoch and allows operation if no stop latch. Never clears STOP. |
-| START | `batch_id, execution_id, recipe_version_id, run_id, phases:[{name,duration_h,target_temp_c}], hold_h, max_pause_h, flush_h?`; requires EMPTY. Optional flush_h overrides the configured default for this batch and survives restart. |
-| PREPARE_TRANSFER | `transfer_id, role:source|target, peer_id, batch_id, execution_id, recipe_version_id, run_id, phases, hold_h, max_pause_h, flush_h?`; source must be READY_TO_TRANSFER and target EMPTY. Target persists staged next-stage inputs; source retains ownership. |
-| EXECUTE_TRANSFER | `transfer_id, duration_h`; requires matching reservation. Both participants progress for duration_h then emit TRANSFER_READY and wait for COMMIT. |
-| COMMIT_TRANSFER | `transfer_id, discard_reason?`; only after TRANSFER_READY and a durable backend commit. Commit the source first; its TRANSFER_COMMITTED preserves any discard_reason, even after emptying. Then commit the target with that reason. A tainted target enters FLUSH_PENDING instead of production. |
-| ABORT_TRANSFER | `transfer_id`; cancel pending transfer before commit; source retains batch, target empties. No automatic discard. |
-| STOP | `scope:global|local`; immediate latched inhibition, no material movement, no wait for stage completion. |
-| RESUME | `scope:global|local`; explicit reset of that latch only. A global reset cannot silently clear a physical/local stop. Requires permit before progress. |
-| FLUSH | `batch_id, reason`; marks batch irrecoverable, cancels production and starts timed removal when permitted and not stopped. If transfer unresolved, emits FLUSH_REQUESTED and waits for reconciliation/abort before removal. |
-| SNAPSHOT | Reply with current state. |
+| PERMIT | `permit_ms,sim_time_h,time_scale,controller_boot_id`; renew permission without clearing STOP. |
+| START | `duration_h,target_temp_c`; load an EMPTY machine and begin one operation. |
+| PROCESS | `duration_h,target_temp_c`; execute one operation on contents already held in READY. |
+| PREPARE_TRANSFER | `role:source|target`; reserve a READY source or EMPTY receiver. No peer or transfer business ID. |
+| EXECUTE_TRANSFER | `duration_h`; simulate the reserved pump operation, then report completion and wait. |
+| COMMIT_TRANSFER | Set a finished source EMPTY or receiver occupied and READY. Receiver processing requires a separate PROCESS command. |
+| ABORT_TRANSFER | Cancel the equipment reservation; source retains contents and receiver becomes EMPTY. |
+| RELEASE | Empty READY equipment; the scheduler uses this for final output after filtering. |
+| STOP | `scope:local|global`; latch immediate inhibition. STOP remains conservative across delayed messages. |
+| RESUME | `scope:local|global`; explicitly reset only that latch. A permit is still needed. |
+| FLUSH | Optional `duration_h`; request removal of current contents. During transfer, wait for scheduler resolution before emptying. |
+| SNAPSHOT | Report the current technical observation. |
 
-Operations: EMPTY, RESERVED_IN, PROCESSING, READY_TO_TRANSFER, TRANSFERRING_OUT, TRANSFERRING_IN, FLUSH_PENDING, FLUSHING, RECOVERING, FAULT. Keep local_stop/global_stop and permit separately. No cleaning state. Filter phase completion emits COMPLETED and releases batch atomically. Terminal loss is counted once, never again on later removal.
+The local `machinectl flush` simulates a physical button and has no batch argument. The dashboard instead identifies a batch to the backend API; the scheduler validates its current assignment before sending a guarded equipment FLUSH.
 
-Events: STARTED, PHASE_COMPLETED, READY_TO_TRANSFER, TRANSFER_PREPARED, TRANSFER_READY, TRANSFER_COMMITTED, TRANSFER_ABORTED, STOPPED, RESUMED, FLUSH_REQUESTED, SPOILED, FLUSHED, COMPLETED, REJECTED, SNAPSHOT. Every event includes current `snapshot`; preserve affected batch/transfer IDs in the event envelope even if snapshot is now empty. Command result events include command_id; rejected commands also include reason. Local flush/stop call the same durable controller handlers as network commands. Command deduplication excludes epoch from the semantic payload so a new leader can replay a durable operation with a newer fencing token.
+## Equipment observations
 
-Snapshot fields: `machine_id,type,state,batch_id,execution_id,transfer_id,recipe_version_id,run_id,phase,phase_index,phase_elapsed_h,phase_duration_h,hold_deadline_h,local_stop,global_stop,stopped,permit_valid,epoch,state_version,sim_time_h,machine_sequence,controller_boot_id`. Heartbeats carry this snapshot at top level, plus schema_version and ts_utc. `stopped` includes expired permit. Snapshot does not move backend ownership on its own; reconcile with durable transfer decision.
+Technical states: `EMPTY`, `READY`, `PROCESSING`, `RESERVED_IN`, `TRANSFERRING_IN`, `TRANSFERRING_OUT`, `FLUSH_PENDING`, `FLUSHING`. STOP is represented by separate latches, not a replacement operation state. There is no cleaning state.
 
-Kafka `telemetry`, key machine_id: envelope plus `sensor,value,unit,phase`. Kafka `batch-events`, key batch_id: canonical backend production event with event_id and reason. Critical state events also traverse MQTT to the backend; Kafka telemetry is not a substitute for their acknowledgements. Backend emits ADMITTED at durable admission and exactly one LOSS_RECORDED per lost batch, with reason spoilage or operator. Rejected stale ownership evidence is IGNORED_MACHINE_EVENT with original_event and accepted:false. Export is ordered by monotonically increasing recorded_seq; consumers must not paginate by event timestamp.
+Snapshots expose `machine_id,type,controller_boot_id,state,occupied,duration_h,elapsed_h,target_temp_c,transfer_ready,flush_requested,local_stop,global_stop,stopped,permit_valid,epoch,state_version,machine_sequence,sim_time_h,ts_utc`, and applicable `current_command_id,interrupted_command_id,transfer_role`. See the event JSON schema for the exact object. A frontend phase label or batch number is added by the backend, never emitted by the controller.
+
+Events are `PROCESS_STARTED`, `PROCESS_COMPLETED`, `TRANSFER_PREPARED`, `TRANSFER_READY`, `TRANSFER_COMMITTED`, `TRANSFER_ABORTED`, `RELEASED`, `STOPPED`, `RESUMED`, `FLUSH_REQUESTED`, `FLUSHED`, `REJECTED`, `SNAPSHOT`. Every event includes a technical snapshot and its process/sequence identity. Timer completions refer to the initiating actuator command. Interrupted-command correlation lets the backend associate a local flush with historical equipment work even if delivery is delayed. `contents_discarded` reports physical removal/flush intent during transfer; the scheduler decides the resulting business outcome.
+
+Events remain in RAM until backend acknowledgement `{event_id}`. The backend persists and deduplicates them before acknowledging. Restart loses controller progress, latches and pending events; there is no disk journal. An occupied, assigned or unresolved restart latches backend STOP and invalidates the run. Resume returns a conflict until a fresh factory is started. Central evidence is preserved; missing material is not fabricated or counted as completed.
+
+Kafka `telemetry`, keyed by machine ID, contains only technical sensor data and actuator-command correlation. The backend joins that correlation to its durable command records, rather than assuming a delayed sample belongs to the current occupant. Kafka `batch-events`, keyed by batch ID, contains canonical business events produced by the backend, including ADMITTED, phase/transfer observations, exactly one LOSS_RECORDED per loss, and final COMPLETED. Controller events and canonical business events are different contracts. Event export uses monotonically increasing `recorded_seq`; never paginate by source timestamp.
 
 ## HTTP service ports and contracts
 
 Backend port 8080, inventory port 8081, frontend container port 80 (host 8088). Backend `/api/health` returns `{status:"ok"}` only after database initialisation; `/ws` is raw JSON WebSocket, event `{type, data}`. Frontend uses same-origin `/api` and `/ws`.
 
-Inventory: `GET /health`, `GET /stock` -> `{stock:{malt_kg,hops_kg,yeast_kg,water_l}}`; `POST /reserve` body `{batch_id, ingredients:{malt_kg,hops_kg,yeast_kg,water_l}}` -> `{batch_id,status:"reserved",stock}`; insufficient stock returns 409 with `error:"insufficient_stock"`. Existing key with identical quantities returns the previous reservation without deducting again; conflicting quantities return 409. `GET /reservations/{batch_id}`; `POST /reservations/{batch_id}/release` releases once before admission cancellation. `POST /restock` accepts `{request_id, ingredients:{...}}`, idempotently. Validate finite, nonnegative numeric values, reject booleans/unknown fields, persist stock and reservation state atomically. Storage path `INVENTORY_STATE_FILE`, seed `INITIAL_BATCHES` default 100. Service serialises mutations.
+Inventory: `GET /health`, `GET /stock` -> `{stock:{malt_kg,hops_kg,yeast_kg,water_l}}`; `POST /reserve` body `{batch_id, ingredients:{malt_kg,hops_kg,yeast_kg,water_l}}` -> `{batch_id,status:"reserved",stock}`; insufficient stock returns 409 with `error:"insufficient_stock"`. Existing key with identical quantities returns the previous reservation without deducting again; conflicting quantities return 409. `GET /reservations/{batch_id}`; `POST /reservations/{batch_id}/release` releases once before admission cancellation. `POST /restock` accepts `{request_id, ingredients:{...}}`, idempotently. Validate finite, nonnegative numeric values, reject booleans/unknown fields, update stock and reservations together under a process-local lock. Seed `INITIAL_BATCHES` defaults to 100. State and idempotency history are held in RAM and reset on process restart.
 
 Backend reads recipes from `RECIPE_FILE` (default `/app/config/recipes.json`), env `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`, `REDIS_HOST`, `FACTORY_REDIS_PORT` (numeric, default 6379), `MQTT_URL`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `KAFKA_BROKERS`, `INVENTORY_URL`, `TIME_SCALE`, `POLICY`, `WIP_LIMIT`, `RUN_ID`.
 
-Inventory release of an unknown batch persists a released tombstone. A delayed reservation for that ID must fail without deducting stock; otherwise cancellation could leak ingredients when reserve and release race.
+Inventory release of an unknown batch holds a released tombstone in RAM. A delayed reservation for that ID must fail without deducting stock; otherwise cancellation could leak ingredients when reserve and release race.
 
 REST under /api: GET /machines, /recipes, /orders, /batches, /events, /inventory, /line, /telemetry; POST /orders `{recipe_id,quantity,priority:0}`, /recipes (new recipe), /recipes/{id}/versions (new immutable definition), /orders/{id}/cancel, /batches/{id}/flush, /machines/{id}/stop, /machines/{id}/resume, /machines/{id}/flush `{batch_id}`, /line/stop, /line/resume, /inventory/restock. Collection GETs return JSON arrays, inventory retains its object shape. POST /experiment/start `{run_id,policy,wip_limit,horizon_h}` only when no active batch; GET /experiment/status; POST /experiment/stop. Mutations accept `Idempotency-Key` and `X-Operator` headers. Conflicts return 409 `{error, message}`.
 
-Machine records expose snapshot fields plus `online,last_seen`. Orders expose `id,recipe_id,quantity,started,completed,discarded,priority,status`. Batches expose `id,order_id,recipe_id,recipe_version_id,status,machine_id,stage,volume_hl,created_at,completed_at,run_id`. Line exposes `stopped,policy,wip_limit,active_wip,sim_time_h,machines_pending_stop`. Experiment status includes `run_id,policy,started,completed,spoiled,operator_discarded,hl_out,hl_wasted,sim_clock_h,done`.
+Machine records expose technical state plus a backend-enriched production view: `online,last_seen,batch_id,execution_id,recipe_version_id,run_id,phase,phase_index,phase_elapsed_h,phase_duration_h,hold_deadline_h`. Those business fields never appear on the controller wire. Orders expose `id,recipe_id,quantity,started,completed,discarded,priority,status`. Batches expose `id,order_id,recipe_id,recipe_version_id,status,machine_id,stage,volume_hl,created_at,completed_at,run_id`. Line exposes `stopped,policy,wip_limit,active_wip,sim_time_h,machines_pending_stop,restart_blocked,recovery_required,failure_reason`. Experiment status includes `run_id,policy,started,completed,spoiled,operator_discarded,hl_out,hl_wasted,sim_clock_h,done`, plus failure/restart flags and `requires_clean_factory`.
 
 ## Recipe definition
 

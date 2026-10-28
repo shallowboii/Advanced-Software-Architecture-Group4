@@ -14,7 +14,7 @@
     "service-rabbitmq.json",
     "statefulset-kafka.json",
     "service-kafka.json",
-    "statefulset-inventory.json",
+    "deployment-inventory.json",
     "service-inventory.json",
     "deployment-backend.json",
     "service-backend.json",

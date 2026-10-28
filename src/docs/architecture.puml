@@ -3,24 +3,22 @@ skinparam componentStyle rectangle
 actor Operator
 component "React / nginx" as UI
 component "Java backend replicas\nOne fenced coordinator" as Backend
-component "Python inventory" as Inventory
+component "Python inventory\nStock and reservations in RAM" as Inventory
 database PostgreSQL as DB
 database Redis as Cache
 queue "RabbitMQ / MQTT" as MQTT
 queue Kafka
 node "Machine StatefulSets\n1 Pod per physical machine" {
-  component "C controller\nLocal STOP / flush adapter" as Machine
-  database "SQLite journal\nOne PVC per machine" as Journal
+  component "C controller\nRAM state / local STOP / flush" as Machine
 }
 Operator --> UI
 Operator --> Machine : local socket adapter
 UI --> Backend : HTTP / WebSocket
 Backend --> DB : orders / ownership / outbox
-Backend --> Cache : rebuildable views
+Backend --> Cache : live machine registry / heartbeat TTL
 Backend --> Inventory : HTTP JSON reservations
 Backend <--> MQTT : commands / critical events / ACK
 MQTT <--> Machine
-Machine --> Journal
 Machine --> Kafka : synthetic telemetry
 Backend <--> Kafka : telemetry / canonical batch events
 @enduml

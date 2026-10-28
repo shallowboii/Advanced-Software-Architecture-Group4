@@ -265,6 +265,10 @@ W katalogu wyników znajdziesz m.in.:
 - deployment/: dodatkowe dane o wdrożeniu, wersjach i logi.
 
 Sprawdź, czy nie było restartów, długich przerw łączności lub błędów API.
+Maszyny i mock inwentarza przechowują stan tylko w RAM. Restart maszyny
+w trakcie pracy przerywa przebieg; restart inwentarza resetuje zasoby.
+Takiej próby nie kontynuujemy jako poprawnego pomiaru. Zachowaj jej dane
+i uruchom nową próbę w świeżej, odizolowanej fabryce.
 WIP na końcu jest wynikiem eksperymentu; nie doprowadzaj partii do końca poza
 oknem i nie doliczaj ich do throughput. Udziały czasu są estymowane z próbek.
 Aktualny reducer nie wylicza jeszcze czasu realizacji zamówień ani przebiegu

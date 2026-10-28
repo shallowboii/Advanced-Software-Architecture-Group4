@@ -26,9 +26,6 @@
       },
       "spec": {
         "terminationGracePeriodSeconds": 30,
-        "securityContext": {
-          "fsGroup": 10001
-        },
         "containers": [
           {
             "name": "machine",
@@ -67,22 +64,12 @@
                 "value": "2"
               },
               {
-                "name": "STATE_DB",
-                "value": "/data/machine.db"
-              },
-              {
                 "name": "SOCKET_PATH",
                 "value": "/tmp/machine.sock"
               },
               {
                 "name": "FLUSH_H",
                 "value": "0.1"
-              }
-            ],
-            "volumeMounts": [
-              {
-                "name": "data",
-                "mountPath": "/data"
               }
             ],
             "resources": {
@@ -97,23 +84,6 @@
           }
         ]
       }
-    },
-    "volumeClaimTemplates": [
-      {
-        "metadata": {
-          "name": "data"
-        },
-        "spec": {
-          "accessModes": [
-            "ReadWriteOnce"
-          ],
-          "resources": {
-            "requests": {
-              "storage": "128Mi"
-            }
-          }
-        }
-      }
-    ]
+    }
   }
 }

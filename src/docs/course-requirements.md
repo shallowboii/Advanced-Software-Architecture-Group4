@@ -30,7 +30,7 @@ The authoritative course brief calls its minimum implementation an architectural
 | --- | --- | --- | --- |
 | Coordinate information to execute and change production | S1 p. 8 | Orders, central scheduler, MQTT control, Kafka telemetry/events, immutable recipe versions, urgent orders and explicit cancellation/flush; M3-M5 and M8 scenario traces. | Planned. |
 | Run 24/7 | S1 p. 8 | Durable state, recovery, dependency isolation, controller health, active/standby coordinator and a 24-real-hour soak with measured availability; M2, M7-M8. | Planned bounded evidence. Single broker/database/inventory instances are explicit single points of failure; a soak cannot prove indefinite uptime. |
-| Be continuously deployable | S1 p. 8 | Live backend/frontend rollout, fenced leadership handover, compatible schemas/contracts, machine drain/spare strategy, retained journals; M7-M8. | Application deployment demonstration planned. Uninterrupted updates of all infrastructure require the HA option and actual target infrastructure; not established by a mock overlay. |
+| Be continuously deployable | S1 p. 8 | Live backend/frontend rollout, fenced leadership handover, compatible schemas/contracts, machine drain/spare strategy, live controller sessions; M7-M8. | Application deployment demonstration planned. Uninterrupted updates of all infrastructure require the HA option and actual target infrastructure; not established by a mock overlay. |
 | Identify essential quality properties and behavioural requirements | S1 p. 8 | Six-part QAS for correctness, efficiency, recovery, local stop, global stop, monitoring, deployability and modifiability; formal queries plus runtime evidence. | M0 and M6-M8. State numeric thresholds as project choices, not instructor-imposed numbers. |
 
 ## 3 Required architecture technologies and methods
@@ -40,7 +40,7 @@ All rows in this section come from S1 p. 9.
 | Course requirement | Concrete coverage | Evidence to produce |
 | --- | --- | --- |
 | Different programming languages | C controllers, Java backend, Python inventory, TypeScript frontend; Python tools. | Source/builds, language rationale and actual cross-language execution. |
-| Different databases | PostgreSQL durable production records, Redis live cache, SQLite controller journals. | Schemas, migrations, cache reconstruction and restart tests; database trade-offs. |
+| Different databases | PostgreSQL durable production records and Redis live machine registry; no controller database. | Schemas, migrations, cache reconstruction and restart tests; database trade-offs. |
 | Different message buses | RabbitMQ MQTT for control, Kafka for telemetry/history. | Working flows on both brokers, contracts and rationale for the split. One broker alone would not cover the stated plurality. |
 | Different containers | Individual machine containers, application services and infrastructure containers. | Compose/Kubernetes manifests, running instances and CI-published application images. |
 | Point-to-point communication across languages | Java HTTP client to Python inventory using JSON contracts. | Reservation, conflict, timeout/retry and duplicate-request integration tests. Protocol Buffers is an example, not compulsory. |
@@ -76,7 +76,7 @@ Exercise 7.1 asks for experiment design and collected data; the final report als
 | Required research question | Source | Planned answer |
 | --- | --- | --- |
 | How can different architectures support the stated requirements? | S1 p. 10 | Compare the chosen central, layered, event-driven design with credible alternatives such as controller choreography and a single-bus design. Relate each to QAS; use the PUSH/CONWIP study as evidence for the admission decision, not as a substitute for architectural comparison. |
-| What architectural trade-offs follow from technology choices? | S1 p. 10 | Two brokers vs operational cost, controller persistence vs complexity, central scheduling vs availability, fixed-volume simulation vs fidelity, accelerated time vs transport effects, multiple languages vs maintenance. |
+| What architectural trade-offs follow from technology choices? | S1 p. 10 | Two brokers vs operational cost, RAM controllers vs lost execution on restart, central scheduling vs availability, fixed-volume simulation vs fidelity, accelerated time vs transport effects, multiple languages vs maintenance. |
 | What properties can be formally specified, verified and validated; what results and refinements follow? | S1 p. 10 | Current model transformation, properties, verifier output, counterexample/refinement and runtime regression, including explicit abstraction limits. |
 
 The report uses the supplied GroupTemplate and has at most 10 double-column pages (S1 p. 10-11). A working allocation is abstract/introduction/problem/approach 1.5 pages, related work 1, use cases/QAS 1, design/analysis 2, formal V&V/refinement 1.5, empirical evaluation 2, conclusion/discussion and references within the remaining space. Validate the actual compiled PDF; do not assume references are exempt from the limit.

@@ -14,8 +14,6 @@
         "port": 8081,
         "targetPort": 8081
       }
-    ],
-    "clusterIP": "None",
-    "publishNotReadyAddresses": true
+    ]
   }
 }
