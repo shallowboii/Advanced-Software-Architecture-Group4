@@ -123,6 +123,8 @@ public class Coordinator {
           permit.put("command_id", inhibit);
           permit.put("cmd", "STOP");
           permit.put("scope", "global");
+          // The broadcast and targeted copy share an ID and must have the same semantics.
+          permit.remove("controller_boot_id");
         }
         mqtt.send(
             "factory/" + stringValue(machine, "type") + "/" + stringValue(machine, "id") + "/cmd",
