@@ -1,33 +1,26 @@
+"""Domain invariants and real HTTP tests for the process-local inventory mock."""
+
 import concurrent.futures
 import json
-import tempfile
 import threading
 import unittest
 import urllib.error
 import urllib.request
-from pathlib import Path
-from unittest.mock import patch
 
 from server import ApiError, INGREDIENTS, Inventory, InventoryHTTPServer, PER_BATCH
 
 
 class InventoryTests(unittest.TestCase):
-    def setUp(self):
-        self.directory = tempfile.TemporaryDirectory()
-        self.path = Path(self.directory.name) / "inventory.json"
-        self.inventory = Inventory(self.path, 2)
+    """Verify RAM-only stock accounting, cancellation and concurrent retries."""
 
-    def tearDown(self):
-        self.inventory.close()
-        self.directory.cleanup()
+    def setUp(self):
+        self.inventory = Inventory(initial_batches=2)
 
     def request(self, batch_id="batch-1", ingredients=None):
         return {"batch_id": batch_id, "ingredients": ingredients or PER_BATCH.copy()}
 
-    def test_reservation_retry_survives_restart(self):
+    def test_reservation_retry_deducts_only_once(self):
         first = self.inventory.reserve(self.request())
-        self.inventory.close()
-        self.inventory = Inventory(self.path, 999)
         self.assertEqual(first, self.inventory.reserve(self.request()))
         self.assertEqual(self.inventory.stock()["stock"], PER_BATCH)
 
@@ -49,17 +42,18 @@ class InventoryTests(unittest.TestCase):
         self.assertTrue(all(reply == replies[0] for reply in replies))
         self.assertEqual(self.inventory.stock()["stock"], PER_BATCH)
 
-    def test_release_is_durable_and_cannot_revive_batch(self):
+    def test_release_is_idempotent_and_cannot_revive_batch(self):
         self.inventory.reserve(self.request())
         response = self.inventory.release("batch-1")
-        self.inventory.close()
-        self.inventory = Inventory(self.path, 0)
         self.assertEqual(response, self.inventory.release("batch-1"))
         self.assertEqual(self.inventory.reservation("batch-1")["status"], "released")
         with self.assertRaises(ApiError) as caught:
             self.inventory.reserve(self.request())
         self.assertEqual(caught.exception.code, "reservation_released")
-        self.assertEqual(self.inventory.stock()["stock"], {key: value * 2 for key, value in PER_BATCH.items()})
+        self.assertEqual(
+            self.inventory.stock()["stock"],
+            {key: value * 2 for key, value in PER_BATCH.items()},
+        )
 
     def test_conflicting_duplicate_does_not_change_stock(self):
         self.inventory.reserve(self.request())
@@ -72,8 +66,6 @@ class InventoryTests(unittest.TestCase):
     def test_restock_is_idempotent_and_conflict_checked(self):
         body = {"request_id": "delivery-1", "ingredients": PER_BATCH.copy()}
         first = self.inventory.restock(body)
-        self.inventory.close()
-        self.inventory = Inventory(self.path, 0)
         self.assertEqual(first, self.inventory.restock(body))
         self.assertEqual(self.inventory.stock()["stock"]["malt_kg"], 2700)
         body["ingredients"]["malt_kg"] = 1
@@ -97,37 +89,44 @@ class InventoryTests(unittest.TestCase):
             self.inventory.reserve(self.request(str(index), {**zeroes, "hops_kg": 0.1}))
         self.assertEqual(self.inventory.stock()["stock"]["hops_kg"], 39)
 
-    def test_failed_atomic_replace_does_not_mutate_memory(self):
-        before = self.inventory.stock()
-        with patch("server.os.replace", side_effect=OSError("disk failure")):
-            with self.assertRaises(OSError):
-                self.inventory.reserve(self.request())
-        self.assertEqual(self.inventory.stock(), before)
-        self.assertFalse(list(self.path.parent.glob("*.tmp")))
+    def test_new_process_reseeds_stock_and_forgets_retry_history(self):
+        delivery = {"request_id": "delivery", "ingredients": PER_BATCH.copy()}
+        self.inventory.reserve(self.request())
+        self.inventory.release("cancelled")
+        self.inventory.restock(delivery)
+
+        restarted = Inventory(initial_batches=3)
+        self.assertEqual(restarted.stock()["stock"], {
+            key: value * 3 for key, value in PER_BATCH.items()
+        })
+        for batch_id in ("batch-1", "cancelled"):
+            with self.subTest(batch_id=batch_id), self.assertRaises(ApiError):
+                restarted.reservation(batch_id)
+        self.assertEqual(restarted.reserve(self.request("cancelled"))["status"], "reserved")
+        restarted.restock(delivery)
+        self.assertEqual(restarted.stock()["stock"]["malt_kg"], 2700)
+
+    def test_response_mutation_cannot_change_inventory_or_retry_history(self):
+        response = self.inventory.reserve(self.request())
+        response["stock"]["malt_kg"] = -100
+        response["status"] = "released"
         self.assertEqual(self.inventory.reserve(self.request())["status"], "reserved")
+        self.assertEqual(self.inventory.stock()["stock"]["malt_kg"], 900)
 
-    def test_second_writer_is_rejected(self):
-        with self.assertRaises(BlockingIOError):
-            Inventory(self.path, 2)
-
-    def test_corrupt_state_fails_without_reseeding(self):
-        self.inventory.close()
-        self.path.write_text('{"version":1,"stock":{}}')
-        with self.assertRaises(ValueError):
-            Inventory(self.path, 200)
-        self.assertEqual(self.path.read_text(), '{"version":1,"stock":{}}')
+    def test_invalid_seed_is_rejected(self):
+        for seed in (True, -1, 1.5, 1000001):
+            with self.subTest(seed=seed), self.assertRaises(ValueError):
+                Inventory(seed)
 
     def test_unknown_reservation_returns_not_found(self):
         with self.assertRaises(ApiError) as caught:
             self.inventory.reservation("absent")
         self.assertEqual(caught.exception.status, 404)
 
-    def test_release_before_reserve_persists_cancellation_fence(self):
+    def test_release_before_reserve_blocks_delayed_request_in_this_process(self):
         stock = self.inventory.stock()
         response = self.inventory.release("delayed")
         self.assertEqual(self.inventory.stock(), stock)
-        self.inventory.close()
-        self.inventory = Inventory(self.path, 999)
         self.assertEqual(self.inventory.release("delayed"), response)
         with self.assertRaises(ApiError) as caught:
             self.inventory.reserve(self.request("delayed"))
@@ -150,9 +149,10 @@ class InventoryTests(unittest.TestCase):
 
 
 class HTTPTests(unittest.TestCase):
+    """Exercise the real listener and JSON validation through loopback HTTP."""
+
     def setUp(self):
-        self.directory = tempfile.TemporaryDirectory()
-        self.inventory = Inventory(Path(self.directory.name) / "state.json", 1)
+        self.inventory = Inventory(initial_batches=1)
         self.server = InventoryHTTPServer(("127.0.0.1", 0), self.inventory)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -162,8 +162,6 @@ class HTTPTests(unittest.TestCase):
         self.server.shutdown()
         self.server.server_close()
         self.thread.join()
-        self.inventory.close()
-        self.directory.cleanup()
 
     def call(self, path, body=None, raw=None):
         data = raw if raw is not None else None if body is None else json.dumps(body).encode()
@@ -187,6 +185,17 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(self.call("/reservations/b1/release", {})[0], 200)
         self.assertEqual(self.call("/restock", {"request_id": "r1", "ingredients": PER_BATCH})[0], 200)
         self.assertEqual(self.call("/stock")[1]["stock"]["malt_kg"], 1800)
+
+    def test_http_release_before_reserve_rejects_delayed_request(self):
+        original_stock = self.call("/stock")[1]
+        response = self.call("/reservations/delayed/release", {})
+        self.assertEqual(response[0], 200)
+        self.assertEqual(self.call("/reservations/delayed/release", {}), response)
+        status, error = self.call("/reserve", {
+            "batch_id": "delayed", "ingredients": PER_BATCH,
+        })
+        self.assertEqual((status, error["error"]), (409, "reservation_released"))
+        self.assertEqual(self.call("/stock")[1], original_stock)
 
     def test_malformed_json_and_unknown_fields_are_rejected(self):
         for raw in [b"{", b"[]", b'{"batch_id":"a","batch_id":"b"}', b'{"value":NaN}']:
