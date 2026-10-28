@@ -1,0 +1,20 @@
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "filter"
+  },
+  "spec": {
+    "clusterIP": "None",
+    "selector": {
+      "app": "machine",
+      "machine-type": "filter"
+    },
+    "ports": [
+      {
+        "port": 1883,
+        "name": "identity"
+      }
+    ]
+  }
+}

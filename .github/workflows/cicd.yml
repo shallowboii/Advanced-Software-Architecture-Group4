@@ -1,132 +1,113 @@
-name: CI/CD Workflow
-
-  # Workflow triggers
+name: Beer Factory CI
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master, 'feat/**']
   pull_request:
-    branches:
-      - main
-      - master
-
-  # Environment Variables
-env:
-  PACKAGE_REGISTRY_TO_USE: thmork
-  DOCKER_IMAGE_NAME: lowercase-name-dockerimage
-  PROJECT_NAME: ProjectName
-  GROUP_NUMBER: GroupNumber #I.e  Group02
-
+    branches: [main, master]
+  workflow_dispatch:
+permissions:
+  contents: read
 jobs:
-  # Create artifact of repository source code to use for consistensy accross all jobs
-  clone-repository:
+  test:
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
-      contents: read 
+    services:
+      postgres:
+        image: postgres:17.6-bookworm
+        env:
+          POSTGRES_DB: beerfactory
+          POSTGRES_USER: beerfactory
+          POSTGRES_PASSWORD: development-only
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U beerfactory -d beerfactory" --health-interval 5s --health-timeout 3s --health-retries 20
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4.0.0
-      - name: Upload Repository artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          name: repository-artifacts
-          path: .
-
-  # Perform linting and/or other static code analysis
-  code-analysis:
-    runs-on: ubuntu-latest
-    needs: clone-repository
-    permissions:
-      contents: read 
-    # Allow continuation of pipeline if linting fails
-    continue-on-error: true
-    steps:
-      - name: Download repository artifact
-        uses: actions/download-artifact@v4
+          python-version: '3.13'
+      - uses: actions/setup-java@v4
         with:
-          name: repository-artifacts
-          path: .
-      - name: Install dependencies
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: src/backend/pom.xml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+      - name: Install C dependencies
+        run: sudo apt-get update && sudo apt-get install -y libpaho-mqtt-dev libcjson-dev librdkafka-dev
+      - run: make test
+      - run: make -C src/machine check-wire
+      - run: make -C src/machine all
+      - run: mvn -B -f src/backend/pom.xml verify
+        env:
+          TEST_DATABASE_URL: jdbc:postgresql://localhost:5432/beerfactory
+          TEST_DATABASE_USER: beerfactory
+          TEST_DATABASE_PASSWORD: development-only
+      - run: npm ci && npm test && npm run build
+        working-directory: src/frontend
+      - name: Check generated deployment and models
         run: |
-          sudo apt-get update
-          sudo apt-get install -y 
-          echo "install your-linting-dependencies"
-      - name: Run Linter / Other Code Analysis tool
-        run: echo "running linter"
-  
-  # Job for compiling applicaitons and uploading as an artifact
-  build-application:
+          python3 src/tools/generate_deployment.py
+          python3 src/models/generate.py
+          git diff --exit-code -- compose.yaml src/config src/deploy src/models/generated
+          docker compose config -q
+          kubectl kustomize src/deploy/k8s/overlays/mock-cluster > /tmp/factory.yaml
+          echo 'Formal models generated and checked for freshness. UPPAAL verification was not run: a licensed verifier runtime is required.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results
+          path: src/backend/target/surefire-reports
+  integration:
     runs-on: ubuntu-latest
-    needs: clone-repository
+    needs: test
+    timeout-minutes: 20
     steps:
-      - name: Download repository artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+      - run: make up PROFILE=smoke
+      - run: python3 src/tools/smoke.py --timeout 360
+      - run: python3 src/tools/failure_check.py --output /tmp/failure-result.json
+      - name: Capture service logs
+        if: always()
+        run: docker compose --project-directory "$PWD" -f src/deploy/compose/smoke.json logs --no-color > /tmp/beer-factory.log
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: repository-artifacts
-          path: .
-      # Your logic for building the applicaiton, language dependent
-      - name: Build application
-        run:  echo "build app"
-      # Upload compiled artifact
-      - name: Upload Build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifact
-          path: ./src # Replace with path to your compiled artifact
-  
-  # Job for testing the application i.e 
-  test-application:
+          name: integration-service-logs
+          path: |
+            /tmp/beer-factory.log
+            /tmp/failure-result.json
+      - if: always()
+        run: docker compose --project-directory "$PWD" -f src/deploy/compose/smoke.json down -v
+  publish:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    needs: [build-application,code-analysis]
-    # Allow pipeline to continue on error
-    continue-on-error: true
-    steps:
-      # Download build artifact and use for applicaiton tests
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifact
-          path: ./build
-      - name: Test application
-        run: echo "test"
-
-  build-push-docker-image:
-    runs-on: ubuntu-latest
-    needs: [test-application]
+    needs: integration
     permissions:
-      packages: write
       contents: read
+      packages: write
+    strategy:
+      matrix:
+        component: [backend, inventory, machine, frontend]
     steps:
-      - name: Download repository artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
-          name: repository-artifacts
-          path: .
-      - name: Login to GitHub Package Registry
-        uses: docker/login-action@v2
-        with:
-          # Authenticate with GitHub Container Registry, could be changed to use DockerHub
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # Transform github.actor to lowercase
-      - name: Transform username to lowercase
-        run: echo "OWNER_LOWER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-      # Building and pushing application image go to: GitHub -> Profile -> Packages 
-      - name: Build & Push image
-        uses: docker/build-push-action@v3
+      - name: Registry owner
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: echo "OWNER_LOWER=${OWNER,,}" >> "$GITHUB_ENV"
+      - uses: docker/build-push-action@v6
         with:
-          context: . #Path to your dockerfile
+          context: .
+          file: src/${{ matrix.component }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/${{ env.OWNER_LOWER }}/${{ env.DOCKER_IMAGE_NAME }}:1.0-${{ github.sha }},ghcr.io/${{ env.OWNER_LOWER }}/${{ env.DOCKER_IMAGE_NAME }}:latest
-
-  # Job for deploying the application, could be the logic for deploying to your VM  
-  deploy-application:
-    runs-on: ubuntu-latest
-    needs: [build-push-docker-image]
-    continue-on-error: true
-    steps:
-      - name: Logic for deploying application
-        run: echo "deploy app"
+          tags: ghcr.io/${{ env.OWNER_LOWER }}/beerfactory-${{ matrix.component }}:${{ github.sha }}

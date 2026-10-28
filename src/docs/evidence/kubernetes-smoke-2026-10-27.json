@@ -1,0 +1,74 @@
+{
+  "recorded_at": "2026-10-27T17:20:12.344251+00:00",
+  "context": "kind-beerfactory-test",
+  "namespace": "beerfactory",
+  "profile": "smoke",
+  "backend_image": "beerfactory-backend:redis-port-fix",
+  "backend_image_id": "sha256:975b7be694b9216ea442a6fc638f1801de31e0fbcb165db08fdc6fb8fc6b1276",
+  "backend_ready_replicas": 2,
+  "enableServiceLinks": false,
+  "health": {
+    "status": "ok"
+  },
+  "machines": [
+    {
+      "machine_id": "filter-0",
+      "type": "filter",
+      "state": "EMPTY",
+      "online": true
+    },
+    {
+      "machine_id": "kettle-0",
+      "type": "kettle",
+      "state": "EMPTY",
+      "online": true
+    },
+    {
+      "machine_id": "lauter-0",
+      "type": "lauter",
+      "state": "EMPTY",
+      "online": true
+    },
+    {
+      "machine_id": "mash-0",
+      "type": "mash",
+      "state": "EMPTY",
+      "online": true
+    },
+    {
+      "machine_id": "unitank-0",
+      "type": "unitank",
+      "state": "PROCESSING",
+      "online": true
+    },
+    {
+      "machine_id": "whirlpool-0",
+      "type": "whirlpool",
+      "state": "EMPTY",
+      "online": true
+    }
+  ],
+  "batch": {
+    "id": "e9c2fb8f-5649-4da1-946b-76a27496c61d",
+    "status": "COMPLETED",
+    "volume_hl": 50,
+    "stage": 5,
+    "machine_id": "filter-0",
+    "recipe_version_id": "ale:1",
+    "completed_at": "2026-10-27T17:19:02.754468Z"
+  },
+  "smoke_output": "PASS: six controller types, idempotent order, STOP/resume, batch e9c2fb8f-5649-4da1-946b-76a27496c61d, telemetry and unique completion",
+  "backend_build": "Maven verify and Docker build succeeded; 7 tests passed, 6 opt-in JDBC tests skipped",
+  "redis_machine_keys": [
+    "machine:mash-0",
+    "machine:lauter-0",
+    "machine:filter-0",
+    "machine:kettle-0",
+    "machine:unitank-0",
+    "machine:whirlpool-0"
+  ],
+  "application_properties_sha256": "a0a8e8ac6f78ae04c983f9212aae8ab210186182f254bf8350200bd5b5de7756",
+  "limits": [
+    "Single smoke batch; no failure harness, browser walkthrough, 20/40-tank study or soak was run in this check."
+  ]
+}

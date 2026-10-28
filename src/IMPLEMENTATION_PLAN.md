@@ -2,7 +2,7 @@
 
 Build a working distributed Beer Production System for ASAAT, including production control, operator actions, persistence, deployment, formal verification and empirical evaluation. Physical equipment and sensor signals are simulated; the services, messages, state transitions and collected results run for real.
 
-This plan incorporates the decisions agreed on 27 October 2026 and supersedes the earlier seven-machine prototype plan. The companion [course requirements and evidence checklist](docs/course-requirements.md) maps the implementation and submission work to the course materials. Repository documentation and the application UI use English.
+This plan incorporates the decisions agreed on 27–28 October 2026 and supersedes the earlier seven-machine prototype plan. The companion [course requirements and evidence checklist](docs/course-requirements.md) maps the implementation and submission work to the course materials. Repository documentation and the application UI use English.
 
 ## 1 Agreed scope
 
@@ -38,7 +38,7 @@ Use the existing ASAAT `machine-line.md` and browser simulator as inputs, with t
 | Lauter | 2 | 2 | 1 h |
 | Kettle | 1 | 1 | 1 h |
 | Whirlpool | 1 | 1 | 1 h |
-| Uni-tank fermentation | 168 | 336 | Internal transition to maturation |
+| Uni-tank fermentation | 168 | 336 | Scheduler starts maturation in the same occupied vessel |
 | Uni-tank maturation | 168 | 504 | 168 h |
 | Filter | 2 | 2 | Automatic output |
 
@@ -61,20 +61,20 @@ Use short recipe fixtures for CI. Scientific runs use the declared recipe durati
 
 | Component | Implementation | Responsibilities |
 | --- | --- | --- |
-| Machine controller | C, Paho MQTT, librdkafka, cJSON, SQLite | State machine, simulated sensors, local controls, durable command deduplication, operation progress and event journal. |
-| Production backend | Java 21, compatible pinned Spring Boot release, Maven, JDBC | Orders, recipe versions, scheduler, transfer coordination, recovery, REST, WebSocket and experiment control. |
-| Inventory | Go HTTP service | Ingredient stock, idempotent reservations, restock and reservation status. |
+| Machine controller | C, Paho MQTT, librdkafka, cJSON | Equipment state, scalar duration/temperature operations, sensors, local controls and RAM retry records. No batch, recipe or order knowledge. |
+| Production backend | Java 21, compatible pinned Spring Boot release, Maven, JDBC | Orders, recipe versions, scheduler, phase sequencing, expiry, transfer coordination, REST, WebSocket and experiment control. |
+| Inventory | Python HTTP service | Ingredient stock, idempotent reservations, restock and reservation status. |
 | Frontend | TypeScript, React, Vite, Recharts, nginx | Production dashboard, orders, recipes, machine controls, history and experiment status. |
 | RabbitMQ | MQTT plugin | Control commands, machine events, acknowledgements and heartbeat. |
 | Kafka | KRaft | Sensor telemetry and replayable production-event stream. |
 | PostgreSQL | Relational store with versioned migrations | Authoritative production records, command/event inbox and outbox, transfer decisions, recipes and experiments. |
-| Redis | Expiring live-state cache | Last-seen machine state and recent sensor values. Losing Redis does not lose production state. |
+| Redis | Expiring live machine registry | Heartbeats and equipment observations used by scheduling. Losing Redis does not lose production state. |
 
-Use HTTP/JSON between Java and Go as the required point-to-point, cross-language integration. Specify its request, response and error contracts. Protocol Buffers is an example in the course brief, not a required technology.
+Use HTTP/JSON between Java and Python as the required point-to-point, cross-language integration. Specify its request, response and error contracts. Protocol Buffers is an example in the course brief, not a required technology.
 
 The primary systems in the analysis architecture are Production Management (orders, scheduler, recipes), Machine Control (controllers, local inputs, process simulation), and Material Supply (inventory). Monitoring and the supervisor interface connect these systems. This provides the three primary systems requested in Exercise 3 without splitting every Java module into a separate service.
 
-RabbitMQ MQTT supports QoS 1 delivery; application-level deduplication is still required. Use stable client IDs, persistent subscriptions for control traffic, and application acknowledgements after durable processing. Never retain executable START or RESUME commands. See [RabbitMQ MQTT documentation](https://www.rabbitmq.com/docs/mqtt).
+RabbitMQ MQTT supports QoS 1 delivery; application-level deduplication is still required. Use stable client IDs, persistent subscriptions for control traffic, and application acknowledgements after processing; the backend records events durably in PostgreSQL. Never retain executable START or RESUME commands. See [RabbitMQ MQTT documentation](https://www.rabbitmq.com/docs/mqtt).
 
 ## 4 State machines and reliable operations
 
@@ -82,60 +82,58 @@ RabbitMQ MQTT supports QoS 1 delivery; application-level deduplication is still 
 
 Represent machine operation, stop latch and connectivity separately. An offline machine may still physically contain a batch; OFFLINE must not imply EMPTY.
 
-- Operation: `EMPTY`, `RESERVED_IN`, `PROCESSING`, `READY_TO_TRANSFER`, `TRANSFERRING_OUT`, `TRANSFERRING_IN`, `FLUSH_PENDING`, `FLUSHING`, `RECOVERING`, `FAULT`.
-- Stop latch: local and global causes, preserved across restarts. A stop retains the underlying operation and remaining work.
+- Operation: `EMPTY`, `RESERVED_IN`, `PROCESSING`, `READY`, `TRANSFERRING_OUT`, `TRANSFERRING_IN`, `FLUSH_PENDING`, `FLUSHING`.
+- Stop latch: local and global causes, held for the controller process lifetime. A stop retains the underlying operation and remaining work.
 - Connectivity: `ONLINE`, `STALE`, `OFFLINE`, derived from last receipt time and controller session.
 - Batch lifecycle: `ADMITTED`, `PROCESSING`, `WAITING_TRANSFER`, `TRANSFERRING`, `SPOILED`, `FLUSH_PENDING`, `DISCARDED`, `COMPLETED`, `RECOVERY_REQUIRED`.
 
-Fermentation and maturation use a separate phase field while the uni-tank stays occupied. Terminal batch outcomes are immutable. Spoiling and flushing are separate events: loss is booked once when the batch becomes irrecoverable; later removal must not book the loss again.
+The backend stores fermentation/maturation phase information while the unitank stays physically occupied. It sends one scalar technical operation at a time. Terminal batch outcomes are immutable. Spoiling and flushing are separate events: loss is booked once when the batch becomes irrecoverable; later removal must not book the loss again.
 
-Each controller persists its current batch, recipe snapshot, phase progress, reservation, active transfer, stop latches, accepted command IDs and pending events. Persist transitions before acknowledging them. Use SQLite on a per-machine volume, with bounded progress checkpoints and a tested recovery error bound.
+Each controller keeps technical occupancy, operation progress, equipment reservation, stop latches, command retry records and pending observations in RAM. It knows no batch, recipe, order, run or business transfer ID. The scheduler tracks all material and phase information centrally. There is no local database, checkpoint or volume. A new process starts EMPTY with a new boot ID and no valid permit. If the previous process was occupied, assigned or had outstanding material commands, the backend stops the line and rejects resume. This interrupted simulation requires a fresh factory; missing beer is never recreated from a database snapshot.
 
 ### Message contracts
 
-Version JSON schemas and fixtures under `src/contracts`. Common envelope fields:
+Machine MQTT/Kafka envelopes use schema version 2. They carry machine identity, controller boot ID, technical state/version, command or event correlation, and timestamps. They never carry batch, execution, transfer, recipe, run or named phase fields. The backend enriches observations using its durable actuator-command records before producing business events or REST views.
 
-`schema_version`, `message_id`, `command_id` or `event_id`, `machine_id`, `controller_boot_id`, `machine_sequence`, `batch_id`, `execution_id`, `transfer_id`, `recipe_version_id`, `run_id`, `ts_utc`, `sim_time_h`.
-
-Control commands additionally carry coordinator epoch, expected machine-state version and validity conditions. A controller rejects expired, stale, conflicting or out-of-order commands. Duplicate commands return the previously stored outcome. A repeated local flush targets the original batch ID and must never flush its successor.
+Commands contain scalar duration/temperature, direction or stop scope as appropriate. Command IDs support transport retries; boot and technical-state guards reject delayed operations. A local physical flush empties current contents without a batch argument. Dashboard batch-targeted flush requests are validated by the scheduler before sending an actuator command.
 
 | Channel | Purpose |
 | --- | --- |
 | `factory/<type>/<id>/heartbeat` | Full current-state summary every 2 real seconds. |
 | `factory/<type>/<id>/cmd` | Targeted commands and transfer protocol steps. |
-| `factory/<type>/<id>/events` | Durable state transitions and command results. |
+| `factory/<type>/<id>/events` | State transitions and command results retried from RAM. |
 | `factory/<type>/<id>/ack` | Backend acknowledgement that machine events were recorded. |
 | `factory/line/control` | Global stop notification and versioned control state; reconnect always reconciles with durable state. |
 | Kafka `telemetry` | Sensor samples keyed by machine ID. |
 | Kafka `batch-events` | Canonical production events keyed by batch ID. |
 
-Use a PostgreSQL transactional outbox for state change plus command/event publication, and an inbox with unique event IDs for deduplication. Controllers retain critical events until the backend acknowledges their durable receipt. Kafka telemetry may have recorded gaps; critical production events must be replayable without changing outcomes. Stop response must not wait for Kafka or a backend acknowledgement.
+Use a PostgreSQL transactional outbox for state change plus command/event publication, and an inbox with unique event IDs for deduplication. Controllers retain critical events in RAM until the backend acknowledges their durable receipt; this queue is lost on process restart. Kafka telemetry may have recorded gaps; critical production events must be replayable without changing outcomes. Stop response must not wait for Kafka or a backend acknowledgement.
 
 ### Transfer protocol
 
 1. Lock the source batch and both machine assignments in one database transaction. Confirm adjacent types, source readiness, empty receiver, live sessions and no stop latch. Create a unique transfer record.
-2. Send PREPARE to both machines. Each persists its reservation and responds. Start only after both are prepared.
-3. Send EXECUTE with the same transfer ID. Both machines stay occupied for the transfer duration. In the simulation, the source remains the logical owner until commit; partial litres are not modelled.
+2. Send PREPARE to both machines. Each holds its reservation in RAM and responds. Start only after both are prepared.
+3. Send technical EXECUTE commands correlated centrally to the same transfer record; do not send its business ID to machines. Both machines stay occupied for the transfer duration. In the simulation, the source remains the logical owner until commit; partial litres are not modelled.
 4. Once both report transfer completion, record a single durable COMMIT decision, switch ownership in PostgreSQL, and publish the decision through the outbox.
-5. The receiver may process only after accepting COMMIT. The source may become available only after acknowledging its release. Retry each unacknowledged protocol step with the original IDs.
+5. The receiver becomes occupied and READY after COMMIT; the scheduler then issues PROCESS for the next recipe step. The source may become available only after acknowledging its release. Retry each unacknowledged protocol step with the original IDs.
 
-Recover by replaying the stored decision and reconciling both journals. A timeout is not proof that a transfer failed. Never free endpoints merely because an acknowledgement is missing. Before a commit decision, an operator flush or spoil event can abort the transfer and discard its batch. After commit, discard is routed to the current owner. Both endpoints remain fenced until reconciled; the loss is recorded once. A physical operator flush during an unresolved transfer locally stops the operation and records a pending discard; it cannot safely invent the peer's state.
+After a backend/connection interruption, replay the stored decision against the same controller boot IDs and reconcile live snapshots. A busy controller process restart instead invalidates the run and latches STOP; no local recovery exists. A timeout is not proof that a transfer failed. Never free endpoints merely because an acknowledgement is missing. Before a commit decision, an operator flush or spoil event can abort the transfer and discard its batch. After commit, discard is routed to the current owner. Both endpoints remain fenced until reconciled; the loss is recorded once. A physical flush during transfer requests removal and inhibits that operation until the scheduler settles the equipment transfer; the controller does not decide batch ownership or loss accounting.
 
 ### STOP and local operator controls
 
-Implement one priority stop handler in the C controller. A local socket adapter simulates physical button input independently of the backend, MQTT and Kafka. Provide `machinectl stop`, `machinectl flush --batch ...` and explicit reset commands through that socket. A future GPIO adapter calls the same handlers.
+Implement one priority stop handler in the C controller. A local socket adapter simulates physical button input independently of the backend, MQTT and Kafka. Provide `machinectl stop`, `machinectl flush` and explicit reset commands through that socket. A future GPIO adapter calls the same handlers.
 
 The red global STOP first durably latches the backend and inhibits scheduling, then broadcasts and sends tracked stop commands to every commissioned machine. Show acknowledgement per machine; an unreachable machine is UNKNOWN, never falsely confirmed stopped. A separate operator harness can invoke local stop handlers through Compose/Kubernetes exec while the application backend or broker is down. This models local inputs, but it is not an implemented hard-wired factory circuit.
 
-Controllers require a short, periodically renewed run permit. If control connectivity fails, the permit expires and inhibits operation independently of receiving STOP. Use a 3 real-second permit as an initial engineering default; local stop targets <=1 second, while disconnected global stop is bounded by permit expiry. Stop latches survive restart. Fresh permits alone cannot clear them. Resume requires explicit reset, state reconciliation, fresh permits and disposition of spoiled batches before healthy operations continue.
+Controllers require a short, periodically renewed run permit. If control connectivity fails, the permit expires and inhibits operation independently of receiving STOP. Use a 3 real-second permit as an initial engineering default; local stop targets <=1 second, while disconnected global stop is bounded by permit expiry. Stop latches survive reconnection during the same process lifetime. Fresh permits alone cannot clear them. Process restart loses local state; the backend blocks an interrupted run. Resume requires explicit reset, state reconciliation, fresh permits and disposition of spoiled batches before healthy operations continue.
 
 This separation must be reflected in the report: the local stop latency and network/global stop latency are distinct measurements. The previous blanket claim of <=1 second global stop without a bus is not established by software broadcast.
 
 ### Recovery and state ownership
 
-PostgreSQL owns orchestration decisions; controller journals own evidence of local execution. Recovery compares both before issuing new commands. Redis is rebuilt from heartbeats. An expired live-state key is a detection aid, not the only record of the machine or its contents.
+PostgreSQL owns durable coordination and production history. Redis holds the live machine registry with heartbeat TTL; scheduling requires fresh live state. Controllers own execution in RAM. Commands target a controller boot ID so queued commands cannot start material in a replacement process. A missing heartbeat does not mean EMPTY. A busy controller restart stops the run and preserves central evidence.
 
-Inventory reservations use batch ID as the idempotency key. A timed-out reserve request is queried or retried with the same key. Persist stock and reservation records together using a single-writer, atomically replaced file on the inventory volume, keeping the service in the Go standard library. This is a deliberate improvement over the original in-memory mock: a restart must not restore consumed ingredients. Cancellation before admission releases the reservation once; flushing an admitted batch does not refund ingredients.
+Inventory reservations use batch ID as the idempotency key. A timed-out reserve request is queried or retried with the same key. Keep stock, reservations and idempotency records in RAM under a lock, using the Python standard library. The mock resets to initial stock after restart, invalidating the experiment; start a fresh isolated factory before a new measurement. Cancellation before admission releases the reservation once; flushing an admitted batch does not refund ingredients.
 
 ## 5 Scheduling and recipe changes
 
@@ -154,7 +152,7 @@ At 20 tanks, ideal Ale cellar capacity is 20/336 batches per hour, approximately
 
 Use versioned database migrations. Initial entities: `recipe`, `recipe_version`, `production_order`, `batch`, `machine_assignment`, `stage_execution`, `transfer`, `line_control`, `coordinator_epoch`, `command`, `event_inbox`, `outbox`, `production_event`, `telemetry`, `alarm`, `experiment_run`.
 
-Telemetry records include machine, batch, phase, recipe version, run, sensor, unit, value, real timestamp, simulated timestamp and event ID. Batch/run identifiers must not be lost during persistence. Enforce exclusive machine occupancy and one active location/transfer per batch with database constraints and transactions.
+Raw controller telemetry contains technical machine, boot, command correlation, sensor, unit, value and timestamps only. The backend enriches persisted telemetry with batch, phase, recipe and run from its own command records. Batch/run identifiers must not be lost during persistence. Enforce exclusive machine occupancy and one active location/transfer per batch with database constraints and transactions.
 
 | API group | Operations |
 | --- | --- |
@@ -174,11 +172,11 @@ The frontend shows six stage columns, a compact grid of 20/40 uni-tanks, phase/p
 
 ## 7 Availability and deployment
 
-Use six StatefulSets with one application container per machine Pod, stable IDs and per-Pod persistent volumes. Include headless Services and deliberate volume retention. This uses the identity/storage behaviour described in the [Kubernetes StatefulSet documentation](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/). Use explicit, stable IDs and separate volumes in generated Compose profiles as well; do not share a controller journal between replicas or rely on a transient hostname after recreation.
+Use six StatefulSets with one application container per machine Pod, stable ordinal IDs and headless Services. Controllers have no persistent volumes: StatefulSets provide identity only. Compose also gives each controller an explicit stable ID. PostgreSQL and brokers retain infrastructure volumes.
 
 Provide Kustomize profiles for smoke, 20-tank and 40-tank factories. The mock-cluster overlay contains replaceable exposure, storage and resource settings. Pin application images by commit digest/tag and third-party image versions. Add startup/readiness/liveness checks, resource budgets, shutdown handling and broker/database persistent storage. Do not restart a healthy process merely because a dependency is unavailable.
 
-Implement two backend replicas for the Kubernetes deployment profile, with a PostgreSQL advisory lock for scheduler leadership and a monotonically increasing coordinator epoch. On lock/session loss the old leader stops publishing. Controllers fence stale epochs, and the new leader reconciles journals and pending commands before admission. Readiness, handover and permit renewal must allow a normal backend rollout without stopping production. Each API replica can reconstruct current state and resynchronise its WebSocket clients.
+Implement two backend replicas for the Kubernetes deployment profile, with a PostgreSQL advisory lock for scheduler leadership and a monotonically increasing coordinator epoch. On lock/session loss the old leader stops publishing. Controllers fence stale epochs, and the new leader reconciles live controller sessions and pending commands before admission. Readiness, handover and permit renewal must allow a normal backend rollout without stopping production. Each API replica can reconstruct current state and resynchronise its WebSocket clients.
 
 Use compatible additive migrations and backwards-compatible message versions during application rollouts. Frontend rolling deployment must not affect production. Controller upgrades drain selected machines before replacing their Pods; for the one-instance brewhouse stages, upgrade during an empty interval or temporarily add another machine and route new work to it. Do not automatically roll or scale down occupied machines. In the long-cycle tank stage, wait for draining or explicitly schedule the interruption rather than disguising it as continuous operation.
 
@@ -204,13 +202,13 @@ Each milestone leaves runnable evidence and updates the requirement trace. Docum
 | Step | Work and outputs | Completion gate |
 | --- | --- | --- |
 | M0 Establish baseline and contracts | Fetch the current group repo, preserve group work, create an implementation branch. Record agreed scope, revised FR/NFR/QAS, message schemas, state transitions, recipe fixtures and analysis/design component views. | Course matrix has no unassigned item; no CIP or separate maturation machine appears in the current design; sample contracts validate. |
-| M1 Running communication skeleton | Four application images, Compose, RabbitMQ MQTT, Kafka, PostgreSQL, Redis, migrations and health checks. One C machine sends heartbeat and telemetry to the Java backend and UI. Java calls Go inventory. | Real container-to-container command/reply, telemetry persistence, WebSocket update and Java-to-Go reservation all work. Establish build/test CI now. |
-| M2 Controller and local controls | Six machine configurations, uni-tank phases, SQLite journal, command deduplication, simulated sensor profiles/alarms, local stop/flush adapter, permits, checkpoints and recovery report. | Duplicate START does not run twice; controller restart preserves contents; local STOP works with backend/brokers down; expiry does not move material while stopped. |
-| M3 Orders and durable coordination | Recipes/versions, orders, admission, persistent inventory reservation, transactional inbox/outbox, two-end transfer and recovery, automatic filter output. | One 50 hL batch traverses all six machine types once. Failures before/after each transfer decision recover without duplicate occupancy, output or loss. |
+| M1 Running communication skeleton | Four application images, Compose, RabbitMQ MQTT, Kafka, PostgreSQL, Redis, migrations and health checks. One C machine sends heartbeat and telemetry to the Java backend and UI. Java calls Python inventory. | Real container-to-container command/reply, telemetry persistence, WebSocket update and Java-to-Python reservation all work. Establish build/test CI now. |
+| M2 Controller and local controls | Six equipment configurations, scalar operations, RAM deduplication, simulated sensors, local stop/flush adapter, permits and explicit restart limits. | Duplicate START does not run twice; busy controller restart stops the run without recreating contents; local STOP works with backend/brokers down; expiry does not move material while stopped. |
+| M3 Orders and durable coordination | Recipes/versions, orders, admission, in-memory inventory reservation, transactional inbox/outbox, two-end transfer and recovery, automatic filter output. | One 50 hL batch traverses all six machine types once. Connection/backend failures reconcile against the same controller processes without duplicate outcomes. Controller state loss stops the run. |
 | M4 Production policies and interventions | PUSH/CONWIP, deadline-based transfers, hold expiry, order cancellation, local/web flush, global STOP/reset/resume, shortage/restock. | Ten short-fixture batches; shortage stops only admission; recipe changes leave active batches intact; multi-machine STOP and transfer-time flush pass fault tests. |
 | M5 Complete operator UI | Stage/tank view, recipes/orders, telemetry/history, stock, batch trace, flush/STOP/resume controls and recovery visibility. | Browser walkthrough covers a complete order, new recipe, cancellation, local intervention, loss of heartbeat and reconnection. |
 | M6 Formal model and transformation | Current structural/behavioural descriptions, machine-readable timed-statechart subset, PlantUML/UPPAAL generation, queries, naive/refined variants and counterexample-driven test. Start the reduced model in M0; align it with M2-M4 here. | Reproducible model generation and verifier results, explicit abstraction assumptions and at least one real refinement trace. |
-| M7 Kubernetes and live deployment | Six StatefulSets, isolated storage, 20/40 profiles, mock overlay, backend leader handover, immutable published images, controlled controller drain and rollout scripts. | Render and schema validation plus a real local Kubernetes smoke run; backend/frontend rollout during production; machine recreation with volume retained. Actual target-cluster validation remains separate until access exists. |
+| M7 Kubernetes and live deployment | Six StatefulSets with RAM controllers, central infrastructure storage, 20/40 profiles, mock overlay, backend leader handover, immutable published images, controlled controller drain and rollout scripts. | Render and schema validation plus a real local Kubernetes smoke run; backend/frontend rollout during production; empty-machine recreation with a new boot ID and busy-machine restart rejection. Actual target-cluster validation remains separate until access exists. |
 | M8 Experiments and availability evidence | Scenario runner, pilot, raw-event export, CSV reduction, statistical/graph scripts, accelerated production studies, measured stop/recovery/rollout scenarios and a real-time soak. | Every result is reproducible from raw files and a run manifest; invalid/incomplete runs are retained and labelled; no predetermined PUSH/CONWIP winner. |
 | M9 Report and submission | Architecture trade-offs, formal results, empirical analysis, 8-10-paper related work, contribution record, reproducible usage guide, PDF/LaTeX and repository ZIP. | Clean-machine reproduction, <=10-page double-column PDF, archive includes code/models/queries/data and final hand-in workflow passes. |
 
@@ -276,7 +274,7 @@ src/
   contracts/                  JSON schemas and cross-language fixtures
   machine/                    C controller, local operator CLI, tests, Dockerfile
   backend/                    Java services, migrations, tests, Dockerfile
-  inventory/                  Go service, durable stock ledger, tests, Dockerfile
+  inventory/                  Python service, RAM stock mock, tests, Dockerfile
   frontend/                   React application, browser tests, nginx, Dockerfile
   config/                     Recipe and topology profiles
   deploy/compose/             Base configuration and generated stable-ID profiles
@@ -291,11 +289,11 @@ report/GroupTemplate/          Course report and bibliography
 
 Keep application and experiment source under `src`, as required by the repository template. A root Compose file or Makefile can delegate into it.
 
-CI on every PR: schema checks, meaningful C/Java/Go tests, TypeScript build, generated-model checks, four image builds, complete Compose smoke test, manifest validation and report compilation when relevant. No `continue-on-error` on required correctness gates. Upload logs and test artifacts on failure.
+CI on every PR: schema checks, meaningful C/Java/Python tests, TypeScript build, generated-model checks, four image builds, complete Compose smoke test, manifest validation and report compilation when relevant. No `continue-on-error` on required correctness gates. Upload logs and test artifacts on failure.
 
 Publish four images to GHCR from trusted branch pushes after checks, using unique commit tags and `packages: write`; keep untrusted PR validation read-only and do not publish `latest` from PRs. Resolve the actual repository-owner/package permissions in M0. The publication mechanism follows [GitHub's container publication guidance](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images). Test that deployment pulls the published images. Publish both required CPU architectures when the chosen local and cluster platforms differ.
 
-Preserve the purpose of `handin.yml`, but replace template placeholders and connect real build/model/report artifacts as needed. The old instruction to leave that workflow untouched must not prevent a working final submission. The ZIP includes source, contracts, migrations, model sources, transformation code, queries, verifier evidence, experiment data/analysis, usage guide and compilable LaTeX. Do not include credentials or runtime volumes.
+Leave the group’s `handin.yml` unchanged, as required by the original plan. Application build/test/publish belongs in `cicd.yml`. Final submission preparation remains a separate group task. The ZIP includes source, contracts, migrations, model sources, transformation code, queries, verifier evidence, experiment data/analysis, usage guide and compilable LaTeX. Do not include credentials or runtime volumes.
 
 ## 12 Acceptance and outstanding external inputs
 
@@ -304,7 +302,7 @@ Completion requires all of the following:
 - A clean checkout can start the smoke factory, accept an order and complete all six machine types, including both uni-tank phases.
 - The 20/40 profiles run with individual machine Pods and correct exclusive occupancy.
 - Local/web flush and global STOP work in the agreed states, including an in-flight transfer, without duplicate output/loss.
-- Restart/reconnect, duplicate commands, stale coordinator commands and missing acknowledgements preserve recoverable production state.
+- Backend restart/reconnect and command retries preserve coordination while controller processes remain alive. Busy controller restart stops the run; it does not recover local execution.
 - Inventory exhaustion/restock and new recipe versions work without redeploying or changing active batches.
 - Kubernetes application rollout is demonstrated during production, with the observed interruption and remaining infrastructure limitations recorded.
 - Formal model generation, query results, a counterexample/refinement and corresponding runtime validation are reproducible.
