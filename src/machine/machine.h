@@ -3,67 +3,104 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <sqlite3.h>
 
 #define BF_ID 128
 #define BF_NAME 48
-#define BF_PHASES 8
-#define BF_JSON 32768
+#define BF_JSON 16384
+#define BF_SCHEMA_VERSION 2
 
+/** Technical equipment state only. The scheduler owns all production/material associations. */
 typedef struct {
-    char name[BF_NAME];
+    char machine_id[BF_ID];
+    char type[BF_NAME];
+    char boot_id[BF_ID];
+    char state[BF_NAME];
+    char current_command_id[BF_ID];
+    char interrupted_command_id[BF_ID];
+    char flush_command_id[BF_ID];
+    char transfer_role[BF_NAME];
+    char last_permit_id[BF_ID];
     double duration_h;
+    double elapsed_h;
     double target_temp_c;
-} BFPhase;
-
-typedef struct {
-    char machine_id[BF_ID], type[BF_NAME], boot_id[BF_ID];
-    char state[BF_NAME], batch_id[BF_ID], execution_id[BF_ID];
-    char recipe_version_id[BF_ID], run_id[BF_ID];
-    char transfer_id[BF_ID], transfer_role[BF_NAME], peer_id[BF_ID];
-    char last_permit_id[BF_ID], reason[BF_ID];
-    BFPhase phases[BF_PHASES];
-    int phase_count, phase_index;
-    double phase_elapsed_h, transfer_elapsed_h, transfer_duration_h;
-    double hold_h, hold_deadline_h, max_pause_h, pause_elapsed_h;
-    double flush_h, flush_elapsed_h, sim_time_h, time_scale, last_wall, last_permit_sim_time_h;
-    int local_stop, global_stop, transfer_ready, flush_requested, spoiled;
-    uint64_t epoch, state_version, machine_sequence;
+    double flush_duration_h;
+    double sim_time_h;
+    double time_scale;
+    double last_wall;
+    double last_permit_sim_time_h;
+    int occupied;
+    int local_stop;
+    int global_stop;
+    int transfer_ready;
+    int flush_requested;
+    uint64_t epoch;
+    uint64_t state_version;
+    uint64_t machine_sequence;
 } BFState;
 
+/** One actuator request; IDs identify commands/controllers, never production entities. */
 typedef struct {
-    char command_id[BF_ID], cmd[BF_NAME], machine_id[BF_ID];
-    char batch_id[BF_ID], execution_id[BF_ID], recipe_version_id[BF_ID], run_id[BF_ID];
-    char transfer_id[BF_ID], role[BF_NAME], peer_id[BF_ID], scope[BF_NAME], reason[BF_ID], discard_reason[BF_ID];
-    BFPhase phases[BF_PHASES];
-    int phase_count, local, has_expected_version, has_flush_h;
-    uint64_t epoch, expected_version;
-    double duration_h, hold_h, max_pause_h, permit_ms, sim_time_h, time_scale, flush_h;
+    char command_id[BF_ID];
+    char cmd[BF_NAME];
+    char machine_id[BF_ID];
+    char controller_boot_id[BF_ID];
+    char role[BF_NAME];
+    char scope[BF_NAME];
+    int local;
+    int has_expected_version;
+    int has_duration;
+    int has_temperature;
+    uint64_t epoch;
+    uint64_t expected_version;
+    double duration_h;
+    double target_temp_c;
+    double permit_ms;
+    double sim_time_h;
+    double time_scale;
 } BFCommand;
 
+typedef struct BFPendingEvent BFPendingEvent;
+typedef struct BFCommandResult BFCommandResult;
+
+/** Single-thread-owned RAM. Closing/restarting the process discards every member. */
 typedef struct {
-    sqlite3 *db;
     BFState s;
-    double last_mono, permit_until, last_checkpoint, default_flush_h;
+    BFPendingEvent *pending_events;
+    BFCommandResult *command_results;
+    double last_mono;
+    double permit_until;
+    double default_flush_h;
     char error[256];
 } BFMachine;
 
-int bf_open(BFMachine *m, const char *db_path, const char *id, const char *type,
-            double time_scale, double flush_h, double mono, double wall);
-int bf_checkpoint(BFMachine *m, double mono);
-void bf_close(BFMachine *m);
-int bf_command(BFMachine *m, const BFCommand *c, double mono, double wall,
-               char *response, size_t response_cap);
-int bf_tick(BFMachine *m, double mono, double wall);
-int bf_snapshot(const BFMachine *m, double mono, char *out, size_t cap);
-int bf_ack(BFMachine *m, const char *event_id);
-int bf_outbox(BFMachine *m, int limit, int (*send)(const char *, void *), void *ctx);
-int bf_outbox_new(BFMachine *m, uint64_t *after_sequence, int limit,
-                  int (*send)(const char *, void *), void *ctx);
-int bf_permitted(const BFMachine *m, double mono);
+/** Initialize EMPTY with a fresh boot ID and no execution permit. */
+int bf_init(BFMachine *machine, const char *id, const char *type, double time_scale, double flush_h,
+            double mono, double wall);
+/** Free pending events and deduplication results; no state is written anywhere. */
+void bf_close(BFMachine *machine);
+/** Apply one command: 0 accepted/replayed, 1 rejected, -1 internal failure. */
+int bf_command(BFMachine *machine, const BFCommand *command, double mono, double wall,
+               char *response, size_t capacity);
+/** Advance the equipment timer only over the permitted part of the elapsed interval. */
+int bf_tick(BFMachine *machine, double mono, double wall);
+/** Serialize a read-only equipment observation. */
+int bf_snapshot(const BFMachine *machine, double mono, char *out, size_t capacity);
+/** Acknowledge one RAM-queued event; duplicate acknowledgements are harmless. */
+int bf_ack(BFMachine *machine, const char *event_id);
+/** Retry pending events in creation order without removing them. */
+int bf_outbox(BFMachine *machine, int limit, int (*send)(const char *, void *), void *context);
+/** Publish events after a connection-local sequence cursor, preserving order. */
+int bf_outbox_new(BFMachine *machine, uint64_t *after_sequence, int limit,
+                  int (*send)(const char *, void *), void *context);
+/** Check both STOP latches and the volatile lease. */
+int bf_permitted(const BFMachine *machine, double mono);
+/** Validate one of the six configured equipment types. */
 int bf_valid_type(const char *type);
-void bf_uuid(char *out, size_t cap);
-void bf_utc(double wall, char *out, size_t cap);
-int bf_json_string(const char *value, char *out, size_t cap);
+/** Generate a random boot/event/physical-command UUID. */
+void bf_uuid(char *out, size_t capacity);
+/** Format an event's wall-clock timestamp. */
+void bf_utc(double wall, char *out, size_t capacity);
+/** Escape a JSON string into a bounded caller-owned buffer. */
+int bf_json_string(const char *value, char *out, size_t capacity);
 
 #endif
