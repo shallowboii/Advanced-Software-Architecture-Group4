@@ -129,6 +129,9 @@ export interface Telemetry {
 /** Scheduler policy and global stop status for the production line. */
 export interface Line {
   stopped: boolean;
+  restart_blocked?: boolean;
+  recovery_required?: boolean;
+  failure_reason?: string | null;
   policy: string;
   wip_limit: number;
   active_wip: number;

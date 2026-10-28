@@ -54,6 +54,15 @@ test("progress is bounded and does not divide by zero while idle", () => {
   assert.equal(progress({ ...machine, phase_elapsed_h: NaN }), 0);
 });
 
+test("equipment READY is available for scheduler decisions, not an idle empty vessel", () => {
+  const ready = { ...machine, state: "READY" };
+  assert.equal(machineTone(ready), "ready");
+  assert.equal(machineLabel(ready), "Ready");
+  assert.equal(machineTone({ ...ready, stopped: true }), "stopped");
+  assert.equal(machineTone({ ...ready, online: false }), "offline");
+  assert.equal(machineTone({ ...ready, state: "READY_TO_TRANSFER" }), "ready");
+});
+
 test("recipe editor preserves six stages and a shared two-phase unitank", () => {
   const recipe = newRecipe();
   assert.equal(validateRecipe(recipe), null);

@@ -94,6 +94,13 @@ export default function App() {
   const stale = !lastUpdate || now - lastUpdate > 10000;
   const healthy = !stale && !errors.machines && !errors.line;
   const canAct = !!healthy && busy === 0 && retries.length === 0;
+  const recoveryBlocked = Boolean(
+    data.line?.restart_blocked || data.line?.recovery_required,
+  );
+  useEffect(() => {
+    // A new restart block invalidates any resume confirmation already on screen.
+    if (recoveryBlocked) setConfirmation(null);
+  }, [recoveryBlocked]);
   const selectedMachine = data.machines.find(
     (machine) => machine.machine_id === machineId,
   );
@@ -217,20 +224,39 @@ export default function App() {
           </div>
         </header>
         <main>
-          {data.line?.stopped && (
-            <div className="line-stopped">
+          {(data.line?.stopped || recoveryBlocked) && (
+            <div
+              className="line-stopped"
+              role={recoveryBlocked ? "alert" : "status"}
+            >
               <Icon name="stop" />
               <div>
-                <strong>Global STOP is active</strong>
+                <strong>
+                  {recoveryBlocked
+                    ? "Recovery required · line stopped"
+                    : "Global STOP is active"}
+                </strong>
                 <span>
-                  {pendingStops
-                    ? `${pendingStops} machines have not acknowledged STOP yet.`
-                    : "Machines retain their batches. Holding and interruption limits continue to age."}
+                  {recoveryBlocked
+                    ? data.line?.failure_reason ||
+                      "A controller restarted with unresolved production state."
+                    : pendingStops
+                      ? `${pendingStops} machines have not acknowledged STOP yet.`
+                      : "Equipment retains its contents. Holding and interruption limits continue to age."}
                 </span>
+                {recoveryBlocked && (
+                  <span id="line-recovery-explanation">
+                    Resume is blocked. Start a new run with a clean factory;
+                    unresolved batch evidence is retained.
+                  </span>
+                )}
               </div>
               <button
                 className="button danger-outline"
-                disabled={!canAct}
+                disabled={!canAct || recoveryBlocked}
+                aria-describedby={
+                  recoveryBlocked ? "line-recovery-explanation" : undefined
+                }
                 onClick={() =>
                   confirm(
                     "Resume the production line?",

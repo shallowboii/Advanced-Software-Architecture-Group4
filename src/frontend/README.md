@@ -20,6 +20,7 @@ Vite proxies `/api` and `/ws` to `localhost:8080`. The production image uses ngi
 - A stale scheduler/machine snapshot disables ordinary mutations. Global STOP remains available and sends immediately; its status is confirmed by the next scheduler snapshot, including pending machine acknowledgements.
 - Every mutation includes `Idempotency-Key` and `X-Operator`. An uncertain outcome retains the original payload and request key for an explicit retry and inhibits further ordinary mutations until resolved. Retries are held in memory for the current page session; avoid reloading during an uncertain operation.
 - Flush confirmations name the selected batch. Machine flush includes `batch_id`, preventing a delayed click from discarding a replacement batch. Line resume is explicit, and local stops remain independent.
+- If the backend reports `restart_blocked` or `recovery_required`, the STOP banner displays its `failure_reason`, disables line resume and explains that a new run needs a clean factory. The dashboard does not reset or discard unresolved evidence.
 - Recipe editors publish new versions; active batches retain their admitted version. Time values use simulated hours. Volumes are fixed at 50 hL.
 - The operator label is stored locally and used for audit attribution. This classroom application does not provide authentication or physical safety certification.
 

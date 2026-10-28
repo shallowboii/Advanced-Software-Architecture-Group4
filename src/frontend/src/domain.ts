@@ -11,7 +11,7 @@ export function machineTone(machine: Machine): string {
   if (machine.stopped || machine.local_stop || machine.global_stop)
     return "stopped";
   if (machine.state.startsWith("TRANSFERRING")) return "transfer";
-  if (machine.state === "READY_TO_TRANSFER") return "ready";
+  if (["READY", "READY_TO_TRANSFER"].includes(machine.state)) return "ready";
   if (machine.state === "PROCESSING")
     return machine.phase === "maturation" ? "maturation" : "active";
   return "idle";
