@@ -7,11 +7,19 @@ Recorded on 28 October 2026 for the equipment-only revision on `feat/beer-factor
 | Area | Actual check |
 | --- | --- |
 | Python inventory | All 17 tests passed, including three real HTTP tests. Stock, reservations and idempotency records are process-local RAM. |
-| Frontend | Six domain tests, TypeScript compilation and Vite production build passed. Views and command handling are split into documented modules. |
-| Deployment tooling | Three tests passed: stable identities without local databases, combined unitank layout, rejection of unsupported formal constructs. Compose configuration and Kustomize smoke rendering passed. |
+| Frontend | Seven domain tests, TypeScript compilation and Vite production build passed. Views and command handling are split into documented modules. |
+| Deployment tooling | Four tests passed: HTTP error handling, stable identities without local databases, combined unitank layout, rejection of unsupported formal constructs. Compose configuration and Kustomize smoke rendering passed. |
 | Experiment reduction | Eight tests passed. The runner now rejects a controller-restart failure instead of treating the measurement as successful. |
 | Formal generation | Regeneration produced no changes to generated models or queries after readability edits. |
-| Controller/backend integration | Pending final checks of the new equipment-only protocol; see runtime evidence added after validation. |
+| C controller | 14 equipment scenarios passed with strict compiler warnings; production Docker build also passed the real cJSON wire-parser checks rejecting business metadata and malformed input. The running binary links no SQLite library. |
+| Java backend | Maven verify passed all 24 tests, including 15 integration scenarios against PostgreSQL 17.6. The integration fixtures use a Redis test double; real Redis is exercised by container smoke. |
+| Full Compose factory | The final six-stage smoke passed with idempotent ordering, global STOP/resume, centrally sequenced unitank phases, output and backend-enriched Kafka telemetry. All four production images built. |
+| Kubernetes | The same six-stage smoke passed in isolated kind with two backend/frontend replicas, no Pod restarts during the smoke, six equipment-only controller snapshots and only three infrastructure PVCs. Startup restarts are recorded separately. |
+| Failure checks | Passed backend, MQTT and Kafka outages, local STOP/resume, physical flush with exactly one central loss, and occupied-controller restart leaving UNRESOLVED evidence and HTTP 409 on resume. |
+
+[Kubernetes evidence](evidence/equipment-kubernetes-2026-10-28.json) records actual images, physical snapshots and restart counts before and after the smoke.
+
+Actual [runtime evidence](evidence/equipment-validation-2026-10-28.json) records source revision, image IDs, empty controller/inventory mount lists and final central state. The [failure report](evidence/equipment-failures-2026-10-28.json) contains the observations for each injected fault. These checks used an isolated factory; its expected final restart STOP was preserved in evidence before cleanup.
 
 ## Previous evidence and limits
 
