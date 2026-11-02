@@ -4,14 +4,15 @@
 	<declaration>// Place global declarations here.
 
 // We need this because the next machine can only keep one hot wort batch
-int MAX_HOT_WORT_BATCHES = 1;
-
-int sweet_wort_batches = 0;
-int hot_wort_batches = 0;
+#define MAX_HOT_WORT_BATCHES = 1;
+#define MAX_TANKS = 24;
 
 // Lautering channels
 urgent chan start_lauter;
-broadcast chan done_lauter;</declaration>
+broadcast chan done_lauter;
+
+int tank_chosen_idx = -1;
+int tanks_status[MAX_TANKS] = {0};</declaration>
 	<template>
 		<name>Scheduling</name>
 		<declaration>clock a;</declaration>
@@ -55,22 +56,26 @@ const int T_LAUTER = 120;</declaration>
 	</template>
 	<template>
 		<name>Boiling</name>
+		<parameter>int &amp;sweet_wort_batches, int &amp;hot_wort_batches</parameter>
 		<declaration>clock c;
 
-void start_boiling() {
+void reset() {
     c = 0;
+}
+
+void start_boiling(int* sweet_wort_batches) {
     sweet_wort_batches--;
 }
 
-void stop_boiling() {
+void stop_boiling(int* hot_wort_batches) {
     hot_wort_batches++;
 }</declaration>
 		<location id="id6" x="-440" y="-178">
 			<name x="-459" y="-212">Wait</name>
 		</location>
-		<location id="id7" x="-102" y="-178">
-			<name x="-110" y="-212">Boil</name>
-			<label kind="invariant" x="-127" y="-161">c &lt;= 60</label>
+		<location id="id7" x="-25" y="-178">
+			<name x="-33" y="-212">Boil</name>
+			<label kind="invariant" x="-50" y="-161">c &lt;= 60</label>
 		</location>
 		<init ref="id6"/>
 		<transition id="id8">
@@ -85,8 +90,9 @@ void stop_boiling() {
 			<target ref="id7"/>
 			<label kind="guard" x="-399" y="-255">sweet_wort_batches &gt;= 0
 hot_wort_batches &lt; MAX_HOT_WORT_BATCHES</label>
-			<label kind="synchronisation" x="-382" y="-272">start_boiling?</label>
-			<label kind="assignment" x="-382" y="-213">start_boiling();</label>
+			<label kind="synchronisation" x="-399" y="-272">start_boiling?</label>
+			<label kind="assignment" x="-399" y="-221">reset();
+start_boiling();</label>
 		</transition>
 	</template>
 	<template>
@@ -98,17 +104,96 @@ hot_wort_batches &lt; MAX_HOT_WORT_BATCHES</label>
 	</template>
 	<template>
 		<name>Tank</name>
-		<location id="id11" x="0" y="0">
+		<parameter>int tank_idx, int &amp;cold_wart_batches, int &amp;green_beer_batches, int&amp; beer_batches</parameter>
+		<declaration>clock c;
+
+void reset() {
+    c = 0;
+}
+
+void start_fermentation() {
+    cold_wort_batches--;
+}
+
+void stop_fermentation() {
+    green_beer_batches++;
+}
+
+void start_maturation() {
+    green_beer_batches--;
+}
+
+void stop_maturation() {
+    beer_batches++;
+}
+
+void set_tank_busy() {
+    tanks_status[tank_idx] = 1;
+}
+
+void set_tank_free() {
+    tanks_status[tank_idx] = 0;
+}</declaration>
+		<location id="id11" x="-858" y="-187">
+			<name x="-875" y="-221">Wait</name>
+		</location>
+		<location id="id12" x="-195" y="-280">
+			<name x="-238" y="-314">Fermentation</name>
+			<label kind="invariant" x="-229" y="-263">c &lt;= 120</label>
+		</location>
+		<location id="id13" x="144" y="-119">
+			<name x="102" y="-153">Maturation</name>
+			<label kind="invariant" x="161" y="-111">c &lt;= 120 + 216</label>
+		</location>
+		<location id="id14" x="-510" y="-272">
+			<name x="-520" y="-306">CheckTankIdx</name>
+			<committed/>
 		</location>
 		<init ref="id11"/>
+		<transition id="id15">
+			<source ref="id14"/>
+			<target ref="id11"/>
+			<label kind="guard" x="-671" y="-382">tank_idx != chosen_tank</label>
+			<nail x="-739" y="-399"/>
+		</transition>
+		<transition id="id16">
+			<source ref="id14"/>
+			<target ref="id12"/>
+			<label kind="guard" x="-459" y="-263">tank_idx == chosen_tank
+cold_wart_batches &gt;= 1</label>
+			<label kind="assignment" x="-459" y="-221">reset();
+set_tank_busy();
+start_fermentation();</label>
+		</transition>
+		<transition id="id17">
+			<source ref="id11"/>
+			<target ref="id14"/>
+			<label kind="synchronisation" x="-731" y="-212">start_maturation_fermentation?</label>
+		</transition>
+		<transition id="id18">
+			<source ref="id13"/>
+			<target ref="id11"/>
+			<label kind="guard" x="-535" y="-34">c &gt;= 120 + 216</label>
+			<label kind="synchronisation" x="-535" y="-17">done_maturation_fermentation!</label>
+			<label kind="assignment" x="-535" y="0">stop_maturation();
+set_tank_free();</label>
+			<nail x="-467" y="-42"/>
+		</transition>
+		<transition id="id19">
+			<source ref="id12"/>
+			<target ref="id13"/>
+			<label kind="guard" x="-76" y="-289">c = 120</label>
+			<label kind="assignment" x="-76" y="-272">stop_fermentation();
+start_maturation();</label>
+		</transition>
 	</template>
 	<template>
 		<name>Filtering</name>
 		<declaration>clock a;
 </declaration>
-		<location id="id12" x="0" y="0">
+		<location id="id20" x="0" y="0">
 		</location>
-		<init ref="id12"/>
+		<init ref="id20"/>
 	</template>
 	<system>// Place template instantiations here.
 Process = Template();
