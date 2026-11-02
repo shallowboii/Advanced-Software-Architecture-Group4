@@ -7,7 +7,11 @@
 int MAX_HOT_WORT_BATCHES = 1;
 
 int sweet_wort_batches = 0;
-int hot_wort_batches = 0;</declaration>
+int hot_wort_batches = 0;
+
+// Lautering channels
+urgent chan start_lauter;
+broadcast chan done_lauter;</declaration>
 	<template>
 		<name>Scheduling</name>
 		<declaration>clock a;</declaration>
@@ -25,10 +29,29 @@ clock a;</declaration>
 	</template>
 	<template>
 		<name>Lautering</name>
-		<declaration>clock a;</declaration>
-		<location id="id2" x="0" y="0">
+		<declaration>clock x;
+const int T_LAUTER = 120;</declaration>
+		<location id="id2" x="-34" y="-25">
+			<name x="-44" y="-59">Idle</name>
+		</location>
+		<location id="id3" x="161" y="-25">
+			<name x="151" y="-59">Lautering</name>
+			<label kind="invariant" x="151" y="-8">x &lt;= 60</label>
 		</location>
 		<init ref="id2"/>
+		<transition id="id4">
+			<source ref="id2"/>
+			<target ref="id3"/>
+			<label kind="synchronisation" x="-16" y="-42">start_lauter?</label>
+			<label kind="assignment" x="-16" y="-25">x=0</label>
+		</transition>
+		<transition id="id5">
+			<source ref="id3"/>
+			<target ref="id2"/>
+			<label kind="guard" x="76" y="34">x == T_LAUTER</label>
+			<label kind="synchronisation" x="76" y="51">done_lauter!</label>
+			<nail x="68" y="144"/>
+		</transition>
 	</template>
 	<template>
 		<name>Boiling</name>
@@ -42,24 +65,24 @@ void start_boiling() {
 void stop_boiling() {
     hot_wort_batches++;
 }</declaration>
-		<location id="id3" x="-440" y="-178">
+		<location id="id6" x="-440" y="-178">
 			<name x="-459" y="-212">Wait</name>
 		</location>
-		<location id="id4" x="-102" y="-178">
+		<location id="id7" x="-102" y="-178">
 			<name x="-110" y="-212">Boil</name>
 			<label kind="invariant" x="-127" y="-161">c &lt;= 60</label>
 		</location>
-		<init ref="id3"/>
-		<transition id="id5">
-			<source ref="id4"/>
-			<target ref="id3"/>
+		<init ref="id6"/>
+		<transition id="id8">
+			<source ref="id7"/>
+			<target ref="id6"/>
 			<label kind="synchronisation" x="-340" y="-68">done_boiling!</label>
 			<label kind="assignment" x="-340" y="-51">stop_boiling();</label>
 			<nail x="-289" y="-68"/>
 		</transition>
-		<transition id="id6">
-			<source ref="id3"/>
-			<target ref="id4"/>
+		<transition id="id9">
+			<source ref="id6"/>
+			<target ref="id7"/>
 			<label kind="guard" x="-399" y="-255">sweet_wort_batches &gt;= 0
 hot_wort_batches &lt; MAX_HOT_WORT_BATCHES</label>
 			<label kind="synchronisation" x="-382" y="-272">start_boiling?</label>
@@ -69,23 +92,23 @@ hot_wort_batches &lt; MAX_HOT_WORT_BATCHES</label>
 	<template>
 		<name>Whirlpooling</name>
 		<declaration>clock a;</declaration>
-		<location id="id7" x="0" y="0">
+		<location id="id10" x="0" y="0">
 		</location>
-		<init ref="id7"/>
+		<init ref="id10"/>
 	</template>
 	<template>
 		<name>Tank</name>
-		<location id="id8" x="0" y="0">
+		<location id="id11" x="0" y="0">
 		</location>
-		<init ref="id8"/>
+		<init ref="id11"/>
 	</template>
 	<template>
 		<name>Filtering</name>
 		<declaration>clock a;
 </declaration>
-		<location id="id9" x="0" y="0">
+		<location id="id12" x="0" y="0">
 		</location>
-		<init ref="id9"/>
+		<init ref="id12"/>
 	</template>
 	<system>// Place template instantiations here.
 Process = Template();
