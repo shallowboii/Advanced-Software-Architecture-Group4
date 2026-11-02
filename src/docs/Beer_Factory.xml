@@ -2,7 +2,12 @@
 <!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.6//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_6.dtd'>
 <nta>
 	<declaration>// Place global declarations here.
-</declaration>
+
+// We need this because the next machine can only keep one hot wort batch
+int MAX_HOT_WORT_BATCHES = 1;
+
+int sweet_wort_batches = 0;
+int hot_wort_batches = 0;</declaration>
 	<template>
 		<name>Scheduling</name>
 		<declaration>clock a;</declaration>
@@ -27,31 +32,60 @@ clock a;</declaration>
 	</template>
 	<template>
 		<name>Boiling</name>
-		<declaration>clock a;</declaration>
-		<location id="id3" x="0" y="0">
+		<declaration>clock c;
+
+void start_boiling() {
+    c = 0;
+    sweet_wort_batches--;
+}
+
+void stop_boiling() {
+    hot_wort_batches++;
+}</declaration>
+		<location id="id3" x="-440" y="-178">
+			<name x="-459" y="-212">Wait</name>
+		</location>
+		<location id="id4" x="-102" y="-178">
+			<name x="-110" y="-212">Boil</name>
+			<label kind="invariant" x="-127" y="-161">c &lt;= 60</label>
 		</location>
 		<init ref="id3"/>
+		<transition id="id5">
+			<source ref="id4"/>
+			<target ref="id3"/>
+			<label kind="synchronisation" x="-340" y="-68">done_boiling!</label>
+			<label kind="assignment" x="-340" y="-51">stop_boiling();</label>
+			<nail x="-289" y="-68"/>
+		</transition>
+		<transition id="id6">
+			<source ref="id3"/>
+			<target ref="id4"/>
+			<label kind="guard" x="-399" y="-255">sweet_wort_batches &gt;= 0
+hot_wort_batches &lt; MAX_HOT_WORT_BATCHES</label>
+			<label kind="synchronisation" x="-382" y="-272">start_boiling?</label>
+			<label kind="assignment" x="-382" y="-213">start_boiling();</label>
+		</transition>
 	</template>
 	<template>
 		<name>Whirlpooling</name>
 		<declaration>clock a;</declaration>
-		<location id="id4" x="0" y="0">
+		<location id="id7" x="0" y="0">
 		</location>
-		<init ref="id4"/>
+		<init ref="id7"/>
 	</template>
 	<template>
 		<name>Tank</name>
-		<location id="id5" x="0" y="0">
+		<location id="id8" x="0" y="0">
 		</location>
-		<init ref="id5"/>
+		<init ref="id8"/>
 	</template>
 	<template>
 		<name>Filtering</name>
 		<declaration>clock a;
 </declaration>
-		<location id="id6" x="0" y="0">
+		<location id="id9" x="0" y="0">
 		</location>
-		<init ref="id6"/>
+		<init ref="id9"/>
 	</template>
 	<system>// Place template instantiations here.
 Process = Template();
