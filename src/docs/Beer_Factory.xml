@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.6//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_6.dtd'>
+<nta>
+	<declaration>// Place global declarations here.
+</declaration>
+	<template>
+		<name>Scheduling</name>
+		<declaration>clock a;</declaration>
+		<location id="id0" x="0" y="0">
+		</location>
+		<init ref="id0"/>
+	</template>
+	<template>
+		<name x="5" y="5">Mashing</name>
+		<declaration>// Place local declarations here.
+clock a;</declaration>
+		<location id="id1" x="0" y="0">
+		</location>
+		<init ref="id1"/>
+	</template>
+	<template>
+		<name>Lautering</name>
+		<declaration>clock a;</declaration>
+		<location id="id2" x="0" y="0">
+		</location>
+		<init ref="id2"/>
+	</template>
+	<template>
+		<name>Boiling</name>
+		<declaration>clock a;</declaration>
+		<location id="id3" x="0" y="0">
+		</location>
+		<init ref="id3"/>
+	</template>
+	<template>
+		<name>Whirlpooling</name>
+		<declaration>clock a;</declaration>
+		<location id="id4" x="0" y="0">
+		</location>
+		<init ref="id4"/>
+	</template>
+	<template>
+		<name>Tank</name>
+		<location id="id5" x="0" y="0">
+		</location>
+		<init ref="id5"/>
+	</template>
+	<template>
+		<name>Filtering</name>
+		<declaration>clock a;
+</declaration>
+		<location id="id6" x="0" y="0">
+		</location>
+		<init ref="id6"/>
+	</template>
+	<system>// Place template instantiations here.
+Process = Template();
+// List one or more processes to be composed into a system.
+system Process;
+
+tank1 = Tank()
+tank2 = Tank()</system>
+	<queries>
+		<query>
+			<formula/>
+			<comment/>
+		</query>
+	</queries>
+</nta>
