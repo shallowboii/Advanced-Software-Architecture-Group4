@@ -36,7 +36,7 @@ const int T_LAUTER = 120;</declaration>
 		</location>
 		<location id="id3" x="161" y="-25">
 			<name x="151" y="-59">Lautering</name>
-			<label kind="invariant" x="151" y="-8">x &lt;= 60</label>
+			<label kind="invariant" x="151" y="-8">x &lt;= T_LAUTER</label>
 		</location>
 		<init ref="id2"/>
 		<transition id="id4">
