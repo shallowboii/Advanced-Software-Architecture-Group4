@@ -1,0 +1,507 @@
+{
+  "recorded_at": "2026-10-28T11:01:05.827437+00:00",
+  "source_git_sha": "2f8d04b1bef746c4867dd7f92b9d8a287fc1f0de",
+  "context": "kind-beerfactory-review",
+  "profile": "smoke: 1 controller of each type; 2 backend and frontend replicas",
+  "smoke_output": "PASS: six controller types, idempotent order, STOP/resume, batch 806630ec-b0a7-4892-98ee-3bef0c635b11, telemetry and unique completion",
+  "restart_counts_before": {
+    "backend-66795bdb96-4xtjb": 2,
+    "backend-66795bdb96-fhq85": 2,
+    "filter-0": 1,
+    "frontend-548c6497cc-mbmr5": 3,
+    "frontend-548c6497cc-t65zm": 3,
+    "inventory-74cc48bd88-xzrsz": 1,
+    "kafka-0": 0,
+    "kettle-0": 1,
+    "lauter-0": 1,
+    "mash-0": 1,
+    "postgres-0": 1,
+    "rabbitmq-0": 0,
+    "redis-c78f744d-hslcm": 1,
+    "unitank-0": 1,
+    "whirlpool-0": 1
+  },
+  "restart_counts_after": {
+    "backend-66795bdb96-4xtjb": 2,
+    "backend-66795bdb96-fhq85": 2,
+    "filter-0": 1,
+    "frontend-548c6497cc-mbmr5": 3,
+    "frontend-548c6497cc-t65zm": 3,
+    "inventory-74cc48bd88-xzrsz": 1,
+    "kafka-0": 0,
+    "kettle-0": 1,
+    "lauter-0": 1,
+    "mash-0": 1,
+    "postgres-0": 1,
+    "rabbitmq-0": 0,
+    "redis-c78f744d-hslcm": 1,
+    "unitank-0": 1,
+    "whirlpool-0": 1
+  },
+  "restart_count_changes_during_smoke": {},
+  "physical_snapshots": {
+    "mash-0": {
+      "schema_version": 2,
+      "machine_id": "mash-0",
+      "type": "mash",
+      "controller_boot_id": "dd685221-5b56-4f8d-b6d6-459bd05f5cfd",
+      "state": "EMPTY",
+      "current_command_id": null,
+      "interrupted_command_id": null,
+      "transfer_role": null,
+      "ts_utc": "2026-10-28T11:01:04Z",
+      "occupied": false,
+      "duration_h": 0,
+      "elapsed_h": 0,
+      "target_temp_c": 0,
+      "transfer_ready": false,
+      "flush_requested": false,
+      "local_stop": false,
+      "global_stop": false,
+      "stopped": false,
+      "permit_valid": true,
+      "epoch": 1,
+      "state_version": 9,
+      "machine_sequence": 9,
+      "sim_time_h": 101.87848633850012
+    },
+    "lauter-0": {
+      "schema_version": 2,
+      "machine_id": "lauter-0",
+      "type": "lauter",
+      "controller_boot_id": "40f62e13-cfc1-4b3d-a60e-5cf375656e3c",
+      "state": "EMPTY",
+      "current_command_id": null,
+      "interrupted_command_id": null,
+      "transfer_role": null,
+      "ts_utc": "2026-10-28T11:01:05Z",
+      "occupied": false,
+      "duration_h": 0,
+      "elapsed_h": 0,
+      "target_temp_c": 0,
+      "transfer_ready": false,
+      "flush_requested": false,
+      "local_stop": false,
+      "global_stop": false,
+      "stopped": false,
+      "permit_valid": true,
+      "epoch": 1,
+      "state_version": 13,
+      "machine_sequence": 13,
+      "sim_time_h": 102.8671138185
+    },
+    "kettle-0": {
+      "schema_version": 2,
+      "machine_id": "kettle-0",
+      "type": "kettle",
+      "controller_boot_id": "cb585c0e-ed63-4b6e-8092-54b6a0302a4b",
+      "state": "EMPTY",
+      "current_command_id": null,
+      "interrupted_command_id": null,
+      "transfer_role": null,
+      "ts_utc": "2026-10-28T11:01:05Z",
+      "occupied": false,
+      "duration_h": 0,
+      "elapsed_h": 0,
+      "target_temp_c": 0,
+      "transfer_ready": false,
+      "flush_requested": false,
+      "local_stop": false,
+      "global_stop": false,
+      "stopped": false,
+      "permit_valid": true,
+      "epoch": 1,
+      "state_version": 13,
+      "machine_sequence": 13,
+      "sim_time_h": 102.42527792200008
+    },
+    "whirlpool-0": {
+      "schema_version": 2,
+      "machine_id": "whirlpool-0",
+      "type": "whirlpool",
+      "controller_boot_id": "28fddda2-12bc-4cd2-8b55-9a21d51bc729",
+      "state": "EMPTY",
+      "current_command_id": null,
+      "interrupted_command_id": null,
+      "transfer_role": null,
+      "ts_utc": "2026-10-28T11:01:05Z",
+      "occupied": false,
+      "duration_h": 0,
+      "elapsed_h": 0,
+      "target_temp_c": 0,
+      "transfer_ready": false,
+      "flush_requested": false,
+      "local_stop": false,
+      "global_stop": false,
+      "stopped": false,
+      "permit_valid": true,
+      "epoch": 1,
+      "state_version": 13,
+      "machine_sequence": 13,
+      "sim_time_h": 102.67733671399992
+    },
+    "unitank-0": {
+      "schema_version": 2,
+      "machine_id": "unitank-0",
+      "type": "unitank",
+      "controller_boot_id": "77227c22-7800-4307-b4b6-0ae033e77e14",
+      "state": "EMPTY",
+      "current_command_id": null,
+      "interrupted_command_id": null,
+      "transfer_role": null,
+      "ts_utc": "2026-10-28T11:01:05Z",
+      "occupied": false,
+      "duration_h": 0,
+      "elapsed_h": 0,
+      "target_temp_c": 0,
+      "transfer_ready": false,
+      "flush_requested": false,
+      "local_stop": false,
+      "global_stop": false,
+      "stopped": false,
+      "permit_valid": true,
+      "epoch": 1,
+      "state_version": 15,
+      "machine_sequence": 15,
+      "sim_time_h": 102.29055671399988
+    },
+    "filter-0": {
+      "schema_version": 2,
+      "machine_id": "filter-0",
+      "type": "filter",
+      "controller_boot_id": "69c15839-e4df-480d-b233-5139275d901f",
+      "state": "EMPTY",
+      "current_command_id": null,
+      "interrupted_command_id": null,
+      "transfer_role": null,
+      "ts_utc": "2026-10-28T11:01:05Z",
+      "occupied": false,
+      "duration_h": 0,
+      "elapsed_h": 0,
+      "target_temp_c": 0,
+      "transfer_ready": false,
+      "flush_requested": false,
+      "local_stop": false,
+      "global_stop": false,
+      "stopped": false,
+      "permit_valid": true,
+      "epoch": 1,
+      "state_version": 10,
+      "machine_sequence": 10,
+      "sim_time_h": 102.65329329699989
+    }
+  },
+  "persistent_claims": [
+    "data-kafka-0",
+    "data-postgres-0",
+    "data-rabbitmq-0"
+  ],
+  "pods": [
+    {
+      "name": "backend-66795bdb96-4xtjb",
+      "ready": true,
+      "images": [
+        {
+          "image": "docker.io/library/beerfactory-backend:local",
+          "image_id": "docker.io/library/import-2026-10-28@sha256:4c3b11b42f1d4972fa9606b6ca824af8c69a57860edcd1a5d378444b292fbdbe"
+        }
+      ]
+    },
+    {
+      "name": "backend-66795bdb96-fhq85",
+      "ready": true,
+      "images": [
+        {
+          "image": "docker.io/library/beerfactory-backend:local",
+          "image_id": "docker.io/library/import-2026-10-28@sha256:4c3b11b42f1d4972fa9606b6ca824af8c69a57860edcd1a5d378444b292fbdbe"
+        }
+      ]
+    },
+    {
+      "name": "filter-0",
+      "ready": true,
+      "images": [
+        {
+          "image": "docker.io/library/beerfactory-machine:local",
+          "image_id": "docker.io/library/import-2026-10-28@sha256:bd08f8069d834d783698a1cdc6ed57ccf7c971bfd1ba003e1b6e31833e9007e6"
+        }
+      ]
+    },
+    {
+      "name": "frontend-548c6497cc-mbmr5",
+      "ready": true,
+      "images": [
+        {
+          "image": "docker.io/library/beerfactory-frontend:local",
+          "image_id": "sha256:58195cdc278a933e79fb00a91541331c1f86f9595211d038f5ce55b563751781"
+        }
+      ]
+    },
+    {
+      "name": "frontend-548c6497cc-t65zm",
+      "ready": true,
+      "images": [
+        {
+          "image": "docker.io/library/beerfactory-frontend:local",
+          "image_id": "sha256:58195cdc278a933e79fb00a91541331c1f86f9595211d038f5ce55b563751781"
+        }
+      ]
+    },
+    {
+      "name": "inventory-74cc48bd88-xzrsz",
+      "ready": true,
+      "images": [
+        {
+          "image": "docker.io/library/beerfactory-inventory:local",
+          "image_id": "sha256:9f7ecc5366e51751466485598325fd0376c404c4f83d95d53776abc374630267"
+        }
+      ]
+    },
+    {
+      "name": "kafka-0",
+      "ready": true,
+      "images": [
+        {
+          "image": "docker.io/apache/kafka:3.9.1",
+          "image_id": "docker.io/apache/kafka@sha256:4ceccc577f03f51f6af8dbfda55194d0d892f4fa7913ffbded567ce3895622ed"
+        }
+      ]
+    },
+    {
+      "name": "kettle-0",
+      "ready": true,
+      "images": [
+        {
+          "image": "docker.io/library/beerfactory-machine:local",
+          "image_id": "docker.io/library/import-2026-10-28@sha256:bd08f8069d834d783698a1cdc6ed57ccf7c971bfd1ba003e1b6e31833e9007e6"
+        }
+      ]
+    },
+    {
+      "name": "lauter-0",
+      "ready": true,
+      "images": [
+        {
+          "image": "docker.io/library/beerfactory-machine:local",
+          "image_id": "docker.io/library/import-2026-10-28@sha256:bd08f8069d834d783698a1cdc6ed57ccf7c971bfd1ba003e1b6e31833e9007e6"
+        }
+      ]
+    },
+    {
+      "name": "mash-0",
+      "ready": true,
+      "images": [
+        {
+          "image": "docker.io/library/beerfactory-machine:local",
+          "image_id": "docker.io/library/import-2026-10-28@sha256:bd08f8069d834d783698a1cdc6ed57ccf7c971bfd1ba003e1b6e31833e9007e6"
+        }
+      ]
+    },
+    {
+      "name": "postgres-0",
+      "ready": true,
+      "images": [
+        {
+          "image": "docker.io/library/postgres:17.6-bookworm",
+          "image_id": "docker.io/library/postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3"
+        }
+      ]
+    },
+    {
+      "name": "rabbitmq-0",
+      "ready": true,
+      "images": [
+        {
+          "image": "docker.io/library/rabbitmq:4.1.4-management",
+          "image_id": "docker.io/library/rabbitmq@sha256:294b01e1796a8acede4619f32a1c394fae1f8021e57986ea01aad38dc2a4f502"
+        }
+      ]
+    },
+    {
+      "name": "redis-c78f744d-hslcm",
+      "ready": true,
+      "images": [
+        {
+          "image": "docker.io/library/redis:7.4.5-alpine",
+          "image_id": "docker.io/library/redis@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08"
+        }
+      ]
+    },
+    {
+      "name": "unitank-0",
+      "ready": true,
+      "images": [
+        {
+          "image": "docker.io/library/beerfactory-machine:local",
+          "image_id": "docker.io/library/import-2026-10-28@sha256:bd08f8069d834d783698a1cdc6ed57ccf7c971bfd1ba003e1b6e31833e9007e6"
+        }
+      ]
+    },
+    {
+      "name": "whirlpool-0",
+      "ready": true,
+      "images": [
+        {
+          "image": "docker.io/library/beerfactory-machine:local",
+          "image_id": "docker.io/library/import-2026-10-28@sha256:bd08f8069d834d783698a1cdc6ed57ccf7c971bfd1ba003e1b6e31833e9007e6"
+        }
+      ]
+    }
+  ],
+  "line": {
+    "id": 1,
+    "epoch": 1,
+    "sim_origin": "2026-10-28T10:58:41.596091Z",
+    "time_scale": 2.0,
+    "stopped": false,
+    "control_version": 2,
+    "policy": "CONWIP",
+    "wip_limit": 1,
+    "run_id": "interactive",
+    "horizon_h": null,
+    "experiment_start_h": 0.0,
+    "experiment_done": false,
+    "restart_blocked": false,
+    "failure_reason": null,
+    "sim_time_h": 72.182182,
+    "active_wip": 0,
+    "recovery_required": false,
+    "machines_pending_stop": []
+  },
+  "experiment/status": {
+    "run_id": "interactive",
+    "policy": "CONWIP",
+    "wip_limit": 1,
+    "started": 1,
+    "failed": false,
+    "failure_reason": null,
+    "requires_clean_factory": false,
+    "completed": 1,
+    "spoiled": 0,
+    "operator_discarded": 0,
+    "hl_out": 50,
+    "hl_wasted": 0,
+    "active_wip": 0,
+    "sim_clock_h": 72.192609,
+    "elapsed_h": 72.192609,
+    "start_sim_h": 0.0,
+    "done": false
+  },
+  "batches": [
+    {
+      "id": "806630ec-b0a7-4892-98ee-3bef0c635b11",
+      "order_id": "44505e0e-50e6-47e6-9b83-b0b6d90ffa9c",
+      "recipe_id": "ale",
+      "recipe_version_id": "ale:1",
+      "recipe": {
+        "id": "ale",
+        "name": "Ale",
+        "stages": [
+          {
+            "type": "mash",
+            "hold_h": 10,
+            "phases": [
+              {
+                "name": "mash",
+                "duration_h": 1,
+                "target_temp_c": 65
+              }
+            ],
+            "max_pause_h": 10
+          },
+          {
+            "type": "lauter",
+            "hold_h": 10,
+            "phases": [
+              {
+                "name": "lauter",
+                "duration_h": 1,
+                "target_temp_c": 76
+              }
+            ],
+            "max_pause_h": 10
+          },
+          {
+            "type": "kettle",
+            "hold_h": 10,
+            "phases": [
+              {
+                "name": "kettle",
+                "duration_h": 1,
+                "target_temp_c": 100
+              }
+            ],
+            "max_pause_h": 10
+          },
+          {
+            "type": "whirlpool",
+            "hold_h": 10,
+            "phases": [
+              {
+                "name": "whirlpool",
+                "duration_h": 1,
+                "target_temp_c": 20
+              }
+            ],
+            "max_pause_h": 10
+          },
+          {
+            "type": "unitank",
+            "hold_h": 168,
+            "phases": [
+              {
+                "name": "fermentation",
+                "duration_h": 1,
+                "target_temp_c": 20
+              },
+              {
+                "name": "maturation",
+                "duration_h": 1,
+                "target_temp_c": 2
+              }
+            ],
+            "max_pause_h": 168
+          },
+          {
+            "type": "filter",
+            "hold_h": null,
+            "phases": [
+              {
+                "name": "filter",
+                "duration_h": 1,
+                "target_temp_c": 3
+              }
+            ],
+            "max_pause_h": 10
+          }
+        ],
+        "flush_h": 0.1,
+        "version": 1,
+        "volume_hl": 50,
+        "transfer_h": 0.1,
+        "ingredients": {
+          "hops_kg": 20,
+          "malt_kg": 900,
+          "water_l": 6000,
+          "yeast_kg": 10
+        }
+      },
+      "status": "COMPLETED",
+      "stage": 5,
+      "machine_id": "filter-0",
+      "execution_id": "d4281c3c-e2fd-407a-85a0-ec18fa1e7cce",
+      "run_id": "interactive",
+      "volume_hl": 50,
+      "loss_reason": null,
+      "created_at": "2026-10-28T10:59:10.803457Z",
+      "completed_at": "2026-10-28T10:59:36.126806Z",
+      "admitted_sim_h": 15.300583,
+      "completed_sim_h": 27.268106,
+      "phase_index": 0,
+      "hold_deadline_h": null,
+      "pause_started_h": null,
+      "pause_accumulated_h": 0.0
+    }
+  ],
+  "passed": true
+}

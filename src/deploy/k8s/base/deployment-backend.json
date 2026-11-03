@@ -1,0 +1,138 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "backend"
+  },
+  "spec": {
+    "replicas": 2,
+    "selector": {
+      "matchLabels": {
+        "app": "backend"
+      }
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "backend"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "backend",
+            "image": "beerfactory-backend:dev",
+            "ports": [
+              {
+                "containerPort": 8080
+              }
+            ],
+            "env": [
+              {
+                "name": "DATABASE_URL",
+                "value": "jdbc:postgresql://postgres:5432/beerfactory"
+              },
+              {
+                "name": "DATABASE_USER",
+                "value": "beerfactory"
+              },
+              {
+                "name": "DATABASE_PASSWORD",
+                "value": "development-only"
+              },
+              {
+                "name": "REDIS_HOST",
+                "value": "redis"
+              },
+              {
+                "name": "FACTORY_REDIS_PORT",
+                "value": "6379"
+              },
+              {
+                "name": "MQTT_URL",
+                "value": "tcp://rabbitmq:1883"
+              },
+              {
+                "name": "MQTT_USERNAME",
+                "value": "beerfactory"
+              },
+              {
+                "name": "MQTT_PASSWORD",
+                "value": "development-only"
+              },
+              {
+                "name": "KAFKA_BROKERS",
+                "value": "kafka:9092"
+              },
+              {
+                "name": "INVENTORY_URL",
+                "value": "http://inventory:8081"
+              },
+              {
+                "name": "TIME_SCALE",
+                "value": "2"
+              },
+              {
+                "name": "POLICY",
+                "value": "CONWIP"
+              },
+              {
+                "name": "RUN_ID",
+                "value": "interactive"
+              },
+              {
+                "name": "RECIPE_FILE",
+                "value": "/app/config/recipes.json"
+              },
+              {
+                "name": "WIP_LIMIT",
+                "value": "20"
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              },
+              "limits": {
+                "memory": "1Gi"
+              }
+            },
+            "readinessProbe": {
+              "httpGet": {
+                "path": "/api/health",
+                "port": 8080
+              },
+              "initialDelaySeconds": 5,
+              "periodSeconds": 2
+            },
+            "volumeMounts": [
+              {
+                "name": "recipes",
+                "mountPath": "/app/config",
+                "readOnly": true
+              }
+            ]
+          }
+        ],
+        "volumes": [
+          {
+            "name": "recipes",
+            "configMap": {
+              "name": "factory-recipes"
+            }
+          }
+        ],
+        "terminationGracePeriodSeconds": 30,
+        "enableServiceLinks": false
+      }
+    },
+    "strategy": {
+      "type": "RollingUpdate",
+      "rollingUpdate": {
+        "maxUnavailable": 0,
+        "maxSurge": 1
+      }
+    }
+  }
+}

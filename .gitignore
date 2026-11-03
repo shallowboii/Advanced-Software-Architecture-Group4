@@ -425,3 +425,8 @@ hs_err_pid*
 replay_pid*
 
 # End of https://www.toptal.com/developers/gitignore/api/csharp,java
+
+# Beer Factory local build and experiment artifacts
+src/backend/target/
+src/experiment/results/
+handin/
