@@ -4,21 +4,25 @@
 	<declaration>// Place global declarations here.
 
 // We need this because the next machine can only keep one hot wort batch
-#define MAX_HOT_WORT_BATCHES = 1;
-#define MAX_TANKS = 24;
-bool tank_busy[MAX_TANKS]
+const int MAX_HOT_WORT_BATCHES = 1;
+const int MAX_TANKS = 24;
+bool tank_busy[MAX_TANKS];
 
 // Lautering channels
 urgent chan start_lauter;
 broadcast chan done_lauter;
 
-int tank_chosen_idx = -1;
-int tanks_status[MAX_TANKS] = {0};
+int chosen_tank = -1;
+int tanks_status[MAX_TANKS];
 int finished_tanks = 0;
+
+// Batch counters between stages
+int sweet_wort_batches = 0, hot_wort_batches = 0, cold_wort_batches = 0;
+int green_beer_batches = 0, beer_batches = 0;
 
 // Channels (for scheduling)
 urgent chan start_mashing, start_boiling, start_whirlpool, start_filtering;
-chan mashed, boiled, whirlpooled, fermented, filtered;
+chan done_mashing, done_boiling, done_whirlpool, done_fermentation, done_filtering;
 broadcast chan start_maturation_fermentation;
 
 // Finished batches?
@@ -54,7 +58,7 @@ int[0, MAX_BATCHES] finished_batches = 0;</declaration>
 		<transition id="id9">
 			<source ref="id4"/>
 			<target ref="id8"/>
-			<label kind="synchronisation" x="-68" y="-212">whirlpooled?</label>
+			<label kind="synchronisation" x="-68" y="-212">done_whirlpool?</label>
 		</transition>
 		<transition id="id10">
 			<source ref="id7"/>
@@ -74,7 +78,7 @@ int[0, MAX_BATCHES] finished_batches = 0;</declaration>
 		<transition id="id13">
 			<source ref="id1"/>
 			<target ref="id5"/>
-			<label kind="synchronisation" x="-782" y="-59">mashed?</label>
+			<label kind="synchronisation" x="-782" y="-59">done_mashing?</label>
 		</transition>
 		<transition id="id14">
 			<source ref="id8"/>
@@ -88,7 +92,7 @@ int[0, MAX_BATCHES] finished_batches = 0;</declaration>
 		<transition id="id15">
 			<source ref="id3"/>
 			<target ref="id7"/>
-			<label kind="synchronisation" x="-408" y="-365">boiled?</label>
+			<label kind="synchronisation" x="-408" y="-365">done_boiling?</label>
 		</transition>
 		<transition id="id16">
 			<source ref="id2"/>
@@ -118,21 +122,21 @@ const int T_MASHING = 2;</declaration>
 			<source ref="id18"/>
 			<target ref="id19"/>
 			<label kind="synchronisation" x="-195" y="-110">start_mashing?</label>
-			<label kind="assignment" x="-144" y="-85">c=0;</label>
+			<label kind="assignment" x="-144" y="-85">c=0</label>
 		</transition>
 		<transition id="id21">
 			<source ref="id19"/>
 			<target ref="id18"/>
 			<label kind="guard" x="-127" y="42">c&gt;=T_MASHING</label>
-			<label kind="synchronisation" x="-85" y="25">mashed!</label>
-			<label kind="assignment" x="-136" y="59">mashed_batches++</label>
+			<label kind="synchronisation" x="-85" y="25">done_mashing!</label>
+			<label kind="assignment" x="-136" y="59">sweet_wort_batches++</label>
 			<nail x="-102" y="42"/>
 		</transition>
 	</template>
 	<template>
 		<name>Lautering</name>
 		<declaration>clock x;
-const int T_LAUTER = 120;</declaration>
+const int T_LAUTER = 2;</declaration>
 		<location id="id22" x="-34" y="-25">
 			<name x="-44" y="-59">Idle</name>
 		</location>
@@ -164,11 +168,11 @@ void reset() {
     c = 0;
 }
 
-void start_boiling(int* sweet_wort_batches) {
+void take_sweet_wort() {
     sweet_wort_batches--;
 }
 
-void stop_boiling(int* hot_wort_batches) {
+void make_hot_wort() {
     hot_wort_batches++;
 }</declaration>
 		<location id="id26" x="-440" y="-178">
@@ -183,17 +187,16 @@ void stop_boiling(int* hot_wort_batches) {
 			<source ref="id27"/>
 			<target ref="id26"/>
 			<label kind="synchronisation" x="-340" y="-68">done_boiling!</label>
-			<label kind="assignment" x="-340" y="-51">stop_boiling();</label>
+			<label kind="assignment" x="-340" y="-51">make_hot_wort()</label>
 			<nail x="-289" y="-68"/>
 		</transition>
 		<transition id="id29">
 			<source ref="id26"/>
 			<target ref="id27"/>
-			<label kind="guard" x="-399" y="-255">sweet_wort_batches &gt;= 0
-hot_wort_batches &lt; MAX_HOT_WORT_BATCHES</label>
+			<label kind="guard" x="-399" y="-255">sweet_wort_batches &gt;= 1 &amp;&amp; hot_wort_batches &lt; MAX_HOT_WORT_BATCHES</label>
 			<label kind="synchronisation" x="-399" y="-272">start_boiling?</label>
-			<label kind="assignment" x="-399" y="-221">reset();
-start_boiling();</label>
+			<label kind="assignment" x="-399" y="-221">reset(),
+take_sweet_wort()</label>
 		</transition>
 	</template>
 	<template>
@@ -205,7 +208,7 @@ start_boiling();</label>
 	</template>
 	<template>
 		<name>Tank</name>
-		<parameter>int tank_idx, int &amp;cold_wart_batches, int &amp;green_beer_batches, int&amp; beer_batches</parameter>
+		<parameter>int tank_idx, int &amp;cold_wort_batches, int &amp;green_beer_batches, int&amp; beer_batches</parameter>
 		<declaration>clock c;
 
 void reset() {
@@ -260,36 +263,35 @@ void set_tank_free() {
 		<transition id="id36">
 			<source ref="id34"/>
 			<target ref="id32"/>
-			<label kind="guard" x="-459" y="-263">tank_idx == chosen_tank
-cold_wart_batches &gt;= 1</label>
-			<label kind="assignment" x="-459" y="-221">reset();
-set_tank_busy();
-start_fermentation();
-tank_busy[tank_idx] = true;</label>
+			<label kind="guard" x="-459" y="-263">tank_idx == chosen_tank &amp;&amp; cold_wort_batches &gt;= 1</label>
+			<label kind="assignment" x="-459" y="-221">reset(),
+set_tank_busy(),
+start_fermentation(),
+tank_busy[tank_idx] = true</label>
 		</transition>
 		<transition id="id37">
 			<source ref="id31"/>
 			<target ref="id34"/>
-			<label kind="guard" x="-875" y="-204">!tank_busy[t] &amp;&amp; started_batches &lt; MAX_BATCHES;</label>
+			<label kind="guard" x="-875" y="-204">started_batches &lt; MAX_BATCHES</label>
 			<label kind="synchronisation" x="-739" y="-221">start_maturation_fermentation?</label>
-			<label kind="assignment" x="-782" y="-187">started_batches++;</label>
+			<label kind="assignment" x="-782" y="-187">started_batches++</label>
 		</transition>
 		<transition id="id38">
 			<source ref="id33"/>
 			<target ref="id31"/>
 			<label kind="guard" x="-535" y="-17">c &gt;= 120 + 216</label>
-			<label kind="assignment" x="-535" y="0">stop_maturation();
-set_tank_free();
-tank_busy[tank_idx] = false;
-finished_tanks++;</label>
+			<label kind="assignment" x="-535" y="0">stop_maturation(),
+set_tank_free(),
+tank_busy[tank_idx] = false,
+finished_tanks++</label>
 			<nail x="-467" y="-42"/>
 		</transition>
 		<transition id="id39">
 			<source ref="id32"/>
 			<target ref="id33"/>
-			<label kind="guard" x="-76" y="-289">c = 120</label>
-			<label kind="assignment" x="-76" y="-272">stop_fermentation();
-start_maturation();</label>
+			<label kind="guard" x="-76" y="-289">c &gt;= 120</label>
+			<label kind="assignment" x="-76" y="-272">stop_fermentation(),
+start_maturation()</label>
 		</transition>
 	</template>
 	<template>
@@ -318,17 +320,16 @@ const int T_FILTERING = 4;
 			<source ref="id40"/>
 			<target ref="id41"/>
 			<label kind="guard" x="-773" y="-297">finished_tanks &gt; 0</label>
-			<label kind="assignment" x="-739" y="-263">c = 0;
+			<label kind="assignment" x="-739" y="-263">c = 0,
 finished_tanks--</label>
 		</transition>
 	</template>
-	<system>// Place template instantiations here.
-Process = Template();
-// Systems
-system Scheduling, Mashing, Lautering, Boiling, Whirlpool, Tank, Filtering;
+	<system>// Template instantiations
+boiling = Boiling(sweet_wort_batches, hot_wort_batches);
+tank1 = Tank(0, cold_wort_batches, green_beer_batches, beer_batches);
+tank2 = Tank(1, cold_wort_batches, green_beer_batches, beer_batches);
 
-tank1 = Tank()
-tank2 = Tank()</system>
+system Scheduling, Mashing, Lautering, boiling, Whirlpooling, tank1, tank2, Filtering;</system>
 	<queries>
 		<query>
 			<formula/>
