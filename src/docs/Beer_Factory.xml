@@ -204,10 +204,81 @@ take_sweet_wort()</label>
 	</template>
 	<template>
 		<name>Whirlpooling</name>
-		<declaration>clock a;</declaration>
-		<location id="id30" x="0" y="0">
+		<parameter>int &amp;unwhirlpooled_beer_batch, int &amp;whirlpooled_beer_batch</parameter>
+		<declaration>clock a;
+
+// Same time unit as the rest of the model
+const int T_SPINUP   = 1;   // motor reaches whirlpool speed
+const int T_WHIRL    = 15;  // whirlpool spinning time
+const int T_SPINDOWN = 1;   // motor stops
+
+const int SPEED_WHIRL = 100;
+int spin = 0;               // current motor speed (0 = stopped)
+
+void reset() {
+    a = 0;
+}
+
+void start_whirlpooling() {
+    unwhirlpooled_beer_batch--;
+}
+
+void spinup() {
+    spin = SPEED_WHIRL;
+}
+
+void spindown() {
+    spin = 0;
+}
+
+void stop_whirlpooling() {
+    whirlpooled_beer_batch++;
+}</declaration>
+		<location id="id100" x="-400" y="0">
+			<name x="-420" y="-34">Wait</name>
 		</location>
-		<init ref="id30"/>
+		<location id="id101" x="-200" y="0">
+			<name x="-220" y="-34">SpinUp</name>
+			<label kind="invariant" x="-230" y="17">a &lt;= T_SPINUP</label>
+		</location>
+		<location id="id102" x="0" y="0">
+			<name x="-30" y="-34">Whirlpool</name>
+			<label kind="invariant" x="-30" y="17">a &lt;= T_WHIRL</label>
+		</location>
+		<location id="id103" x="200" y="0">
+			<name x="170" y="-34">SpinDown</name>
+			<label kind="invariant" x="170" y="17">a &lt;= T_SPINDOWN</label>
+		</location>
+		<init ref="id100"/>
+		<transition id="id108">
+			<source ref="id103"/>
+			<target ref="id100"/>
+			<label kind="guard" x="-50" y="110">a &gt;= T_SPINDOWN</label>
+			<label kind="synchronisation" x="-50" y="127">done_whirlpool!</label>
+			<label kind="assignment" x="-50" y="144">spindown(),
+stop_whirlpooling()</label>
+			<nail x="200" y="100"/>
+			<nail x="-400" y="100"/>
+		</transition>
+		<transition id="id105">
+			<source ref="id100"/>
+			<target ref="id101"/>
+			<label kind="synchronisation" x="-370" y="-68">start_whirlpool?</label>
+			<label kind="assignment" x="-370" y="-51">reset(),
+start_whirlpooling()</label>
+		</transition>
+		<transition id="id106">
+			<source ref="id101"/>
+			<target ref="id102"/>
+			<label kind="guard" x="-170" y="-51">a &gt;= T_SPINUP</label>
+			<label kind="assignment" x="-170" y="-34">spinup(), reset()</label>
+		</transition>
+		<transition id="id107">
+			<source ref="id102"/>
+			<target ref="id103"/>
+			<label kind="guard" x="30" y="-51">a &gt;= T_WHIRL</label>
+			<label kind="assignment" x="30" y="-34">reset()</label>
+		</transition>
 	</template>
 	<template>
 		<name>Tank</name>
@@ -329,10 +400,11 @@ finished_tanks--</label>
 	</template>
 	<system>// Template instantiations
 boiling = Boiling(sweet_wort_batches, hot_wort_batches);
+whirlpooling = Whirlpooling(hot_wort_batches, cold_wort_batches);
 tank1 = Tank(0, cold_wort_batches, green_beer_batches, beer_batches);
 tank2 = Tank(1, cold_wort_batches, green_beer_batches, beer_batches);
 
-system Scheduling, Mashing, Lautering, boiling, Whirlpooling, tank1, tank2, Filtering;</system>
+system Scheduling, Mashing, Lautering, boiling, whirlpooling, tank1, tank2, Filtering;</system>
 	<queries>
 		<query>
 			<formula/>
