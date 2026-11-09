@@ -335,8 +335,89 @@ tank2 = Tank(1, cold_wort_batches, green_beer_batches, beer_batches);
 system Scheduling, Mashing, Lautering, boiling, Whirlpooling, tank1, tank2, Filtering;</system>
 	<queries>
 		<query>
-			<formula/>
-			<comment/>
+			<formula>A[] not deadlock</formula>
+			<comment>NF-5 (reliability): the system never stops for a software reason.
+FAILS TODAY. Trace: mash 2 h -&gt; lauter 2 h -&gt; boil 1 h, then at t = 5 Scheduling sits in a committed location waiting to send start_whirlpool! and Whirlpooling has no transitions, so nobody receives it. Even after the whirlpool exists this will fail again when all tanks are busy, because the location before start_maturation_fermentation! is committed and time cannot pass there. That location must become a normal one.</comment>
+		</query>
+		<query>
+			<formula>E&lt;&gt; finished_batches &gt; 0</formula>
+			<comment>Sanity: at least one batch can go through all seven steps and be filtered.
+FAILS TODAY, same cause as the deadlock (empty Whirlpooling).</comment>
+		</query>
+		<query>
+			<formula>E&lt;&gt; tank1.Fermentation</formula>
+			<comment>Sanity: cold wort reaches a tank at all.
+FAILS TODAY (empty Whirlpooling). Until this holds, every property about tanks below is vacuously true.</comment>
+		</query>
+		<query>
+			<formula>E&lt;&gt; tank1.Fermentation &amp;&amp; tank2.Fermentation</formula>
+			<comment>Precondition for NF-8 (95 % tank usage): two batches ferment at the same time in two tanks.
+FAILS TODAY. Needs the whirlpool AND a scheduler that releases the next batch while the previous one is still in a tank.</comment>
+		</query>
+		<query>
+			<formula>A[] Mashing.Mashing imply Mashing.c &lt;= Mashing.T_MASHING</formula>
+			<comment>FR-4.1: mashing never runs longer than T_MASHING. The guard c &gt;= T_MASHING on the exit edge gives the lower bound, so together the stage lasts exactly T_MASHING hours. Holds.</comment>
+		</query>
+		<query>
+			<formula>A[] Lautering.Lautering imply Lautering.x &lt;= Lautering.T_LAUTER</formula>
+			<comment>FR-4.2: lautering lasts exactly T_LAUTER hours (invariant + guard x == T_LAUTER). Holds.</comment>
+		</query>
+		<query>
+			<formula>A[] boiling.Boil imply boiling.c &lt;= boiling.T_BOILING</formula>
+			<comment>FR-10: sweet wort leaves the kettle as hot wort 1 hour after entering (T_BOILING = 1). Holds since PR #4; before it the invariant was c &lt;= 60, i.e. 60 hours, with no lower bound.</comment>
+		</query>
+		<query>
+			<formula>A[] tank1.Fermentation imply tank1.c &lt;= 120</formula>
+			<comment>Fermentation phase of a tank lasts at most 120 h = 5 days. Vacuously true today (tanks unreachable, see E&lt;&gt; tank1.Fermentation).</comment>
+		</query>
+		<query>
+			<formula>A[] tank1.Maturation imply tank1.c &lt;= 336</formula>
+			<comment>FR-10: beer is transferred out of the tank 14 days = 336 h after entering (120 h fermentation + 216 h maturation, one clock). Vacuously true today.</comment>
+		</query>
+		<query>
+			<formula>A[] sweet_wort_batches &gt;= 0 &amp;&amp; hot_wort_batches &gt;= 0 &amp;&amp; cold_wort_batches &gt;= 0 &amp;&amp; green_beer_batches &gt;= 0 &amp;&amp; beer_batches &gt;= 0</formula>
+			<comment>No stage consumes a batch that does not exist (every start guard requires input &gt;= 1). Holds.</comment>
+		</query>
+		<query>
+			<formula>A[] hot_wort_batches &lt;= MAX_HOT_WORT_BATCHES</formula>
+			<comment>The kettle never produces more hot wort than the whirlpool can hold (MAX_HOT_WORT_BATCHES = 1). Holds.</comment>
+		</query>
+		<query>
+			<formula>Mashing.Mashing --&gt; Lautering.Lautering</formula>
+			<comment>FR-3: every mashed batch is eventually lautered (leads-to). Holds.</comment>
+		</query>
+		<query>
+			<formula>Lautering.Lautering --&gt; boiling.Boil</formula>
+			<comment>FR-3: every lautered batch is eventually boiled. Holds.</comment>
+		</query>
+		<query>
+			<formula>boiling.Boil --&gt; (tank1.Fermentation || tank2.Fermentation)</formula>
+			<comment>FR-3: every boiled batch eventually reaches a tank (via whirlpool).
+FAILS TODAY (empty Whirlpooling).</comment>
+		</query>
+		<query>
+			<formula>tank1.Maturation --&gt; Filtering.Filtering</formula>
+			<comment>FR-3: every matured batch is eventually filtered. Vacuously true today.</comment>
+		</query>
+		<query>
+			<formula>A[] not (Mashing.Mashing &amp;&amp; Lautering.Lautering)</formula>
+			<comment>DOCUMENTS A LIMITATION, not a goal: with the current Scheduling chain mashing and lautering never overlap, because the next start_mashing! fires only after the previous batch got a tank. Holds today. Once the hot side is pipelined (each stage pulls a batch when input &gt;= 1 and output has room, like Boiling already does) this must become FALSE and the next query must hold.</comment>
+		</query>
+		<query>
+			<formula>E&lt;&gt; Mashing.Mashing &amp;&amp; Lautering.Lautering</formula>
+			<comment>TARGET: batch N+1 is mashed while batch N is lautered. FAILS TODAY (serial scheduler). Needed for NF-8: with 24 tanks x 14 days, a batch must leave the hot side every ~14.7 h or less, which a serial 5 h chain does, but only if it never waits for a tank.</comment>
+		</query>
+		<query>
+			<formula>A[] (tank1.Fermentation || tank1.Maturation) imply tank_busy[0]</formula>
+			<comment>A tank that holds beer is marked busy, so the scheduler cannot assign it twice. Vacuously true today.</comment>
+		</query>
+		<query>
+			<formula>A[] tank1.Wait imply !tank_busy[0]</formula>
+			<comment>A free tank is not marked busy (flag is released on Maturation -&gt; Wait). Holds.</comment>
+		</query>
+		<query>
+			<formula>A[] started_batches &lt;= MAX_BATCHES</formula>
+			<comment>Bound on the state space. Holds. NOTE: started_batches++ sits on the broadcast edge Wait -&gt; CheckTankIdx that EVERY tank takes, so one batch increments it once per tank instance. Should move to the edge of the chosen tank only.</comment>
 		</query>
 	</queries>
 </nta>
