@@ -164,6 +164,8 @@ const int T_LAUTER = 2;</declaration>
 		<parameter>int &amp;sweet_wort_batches, int &amp;hot_wort_batches</parameter>
 		<declaration>clock c;
 
+const int T_BOILING = 1; // hours (FR-10)
+
 void reset() {
     c = 0;
 }
@@ -180,12 +182,13 @@ void make_hot_wort() {
 		</location>
 		<location id="id27" x="-25" y="-178">
 			<name x="-33" y="-212">Boil</name>
-			<label kind="invariant" x="-50" y="-161">c &lt;= 60</label>
+			<label kind="invariant" x="-50" y="-161">c &lt;= T_BOILING</label>
 		</location>
 		<init ref="id26"/>
 		<transition id="id28">
 			<source ref="id27"/>
 			<target ref="id26"/>
+			<label kind="guard" x="-340" y="-85">c &gt;= T_BOILING</label>
 			<label kind="synchronisation" x="-340" y="-68">done_boiling!</label>
 			<label kind="assignment" x="-340" y="-51">make_hot_wort()</label>
 			<nail x="-289" y="-68"/>
