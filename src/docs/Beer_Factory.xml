@@ -446,7 +446,39 @@ tank2 = Tank(1, cold_wort_batches, green_beer_batches, beer_batches);
 system Scheduler, Mashing, Lautering, boiling, whirlpooling, tank1, tank2, Filtering;</system>
 	<queries>
 		<query>
-			<formula/>
+			<formula>A[] not deadlock</formula>
+			<comment/>
+		</query>
+		<query>
+			<formula>E&lt;&gt; Boiling.Boil</formula>
+			<comment/>
+		</query>
+		<query>
+			<formula>E&lt;&gt; Boiling.Wait</formula>
+			<comment/>
+		</query>
+		<query>
+			<formula>E&lt;&gt; Mashing.Mash</formula>
+			<comment/>
+		</query>
+		<query>
+			<formula>E&lt;&gt; Mashing.Wait</formula>
+			<comment/>
+		</query>
+		<query>
+			<formula>E&lt;&gt; Lautering.Lauter</formula>
+			<comment/>
+		</query>
+		<query>
+			<formula>E&lt;&gt; Lautering.Wait</formula>
+			<comment/>
+		</query>
+		<query>
+			<formula>E&lt;&gt; Whirpooling.Whirpool</formula>
+			<comment/>
+		</query>
+		<query>
+			<formula>E&lt;&gt; Whirpooling.Wait</formula>
 			<comment/>
 		</query>
 	</queries>
