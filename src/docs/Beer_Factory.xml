@@ -35,17 +35,13 @@ bool is_mashing = false;
 int[0,1] tanks_status[MAX_TANKS];                // 0 = free, 1 = busy
 int[0,MAX_TANKS] free_tank = MAX_TANKS;         // counter of free tanks
 
-//Tank time counter
-//clock tank_clock[MAX_TANKS];
-//int tank_duration[MAX_TANKS];
-
 const int TIME_LEFT_LIMIT = 6;
 const int FERMENTATION_TIME = 120;
 const int MATURATION_TIME = 216;
-  
-// WHIRLPOOLING things :)
+
+// WHIRLPOOLING things
 const int MAX_WHIRLPOOLED_BATCHES = 1;
-      
+
 //Checking time left of tanks
 bool almost_done[MAX_TANKS];
 
@@ -63,21 +59,27 @@ return false;
 			<name x="-51" y="17">Wait</name>
 		</location>
 		<location id="id1" x="-357" y="-144">
+			<name x="-467" y="-153">Maturation</name>
 			<committed/>
 		</location>
 		<location id="id2" x="493" y="0">
+			<name x="510" y="-8">Lauter</name>
 			<committed/>
 		</location>
 		<location id="id3" x="0" y="246">
+			<name x="-34" y="272">Boil</name>
 			<committed/>
 		</location>
-		<location id="id4" x="-382" y="8">
+		<location id="id4" x="-391" y="76">
+			<name x="-485" y="68">Whirlpool</name>
 			<committed/>
 		</location>
 		<location id="id5" x="382" y="-170">
+			<name x="416" y="-178">Mash</name>
 			<committed/>
 		</location>
 		<location id="id6" x="-187" y="-280">
+			<name x="-263" y="-306">Filter</name>
 			<committed/>
 		</location>
 		<location id="id7" x="110" y="-331">
@@ -115,21 +117,22 @@ return false;
 		<transition id="id13">
 			<source ref="id0"/>
 			<target ref="id5"/>
-			<label kind="guard" x="119" y="-187">is the mashing machine free?</label>
-			<label kind="synchronisation" x="161" y="-204">start_mashing!</label>
-			<nail x="238" y="-136"/>
+			<label kind="guard" x="119" y="-204">!is_mashing &amp;&amp; (free_tank &gt;= 4 || any_almost_done())</label>
+			<label kind="synchronisation" x="170" y="-187">start_mashing!</label>
+			<nail x="42" y="-42"/>
+			<nail x="178" y="-127"/>
 		</transition>
 		<transition id="id14">
 			<source ref="id4"/>
 			<target ref="id0"/>
-			<label kind="synchronisation" x="-416" y="-42">start_whirlpool!</label>
-			<nail x="-229" y="-17"/>
+			<label kind="synchronisation" x="-416" y="8">start_whirlpool!</label>
+			<nail x="-229" y="17"/>
 		</transition>
 		<transition id="id15">
 			<source ref="id0"/>
 			<target ref="id4"/>
-			<label kind="synchronisation" x="-391" y="25">done_boiling?</label>
-			<nail x="-229" y="25"/>
+			<label kind="synchronisation" x="-374" y="110">done_boiling?</label>
+			<nail x="-212" y="68"/>
 		</transition>
 		<transition id="id16">
 			<source ref="id3"/>
@@ -158,9 +161,10 @@ return false;
 		<transition id="id20">
 			<source ref="id1"/>
 			<target ref="id0"/>
-			<label kind="synchronisation" x="-459" y="-212">start_maturation_fermentation!</label>
-			<label kind="assignment" x="-459" y="-195">select free tank idx;
-chosen_tank = t;</label>
+			<label kind="select" x="-357" y="-187">t : int[0, MAX_TANKS-1]</label>
+			<label kind="guard" x="-416" y="-170">tanks_status[t] == 0 &amp;&amp; clarified_wort_batches &gt;= 1</label>
+			<label kind="synchronisation" x="-450" y="-221">start_maturation_fermentation!</label>
+			<label kind="assignment" x="-331" y="-204">chosen_tank = t</label>
 			<nail x="-246" y="-127"/>
 		</transition>
 		<transition id="id21">
@@ -273,7 +277,6 @@ take_sweet_wort()</label>
 		<name>Whirlpooling</name>
 		<parameter>int &amp;unwhirlpooled_beer_batch, int &amp;whirlpooled_beer_batch</parameter>
 		<declaration>clock a;
-
 
 const int T_WHIRLPOOLING = 1; //meaning one hour
 
@@ -434,9 +437,9 @@ const int T_FILTERING = 4;
 		<transition id="id55">
 			<source ref="id54"/>
 			<target ref="id53"/>
-			<label kind="guard" x="-714" y="-136">c &gt;= T_FILTERING</label>
-			<label kind="synchronisation" x="-714" y="-153">done_filtering!</label>
-			<label kind="assignment" x="-646" y="-161">finished_batches++</label>
+			<label kind="guard" x="-714" y="-119">c &gt;= T_FILTERING</label>
+			<label kind="synchronisation" x="-714" y="-144">done_filtering!</label>
+			<label kind="assignment" x="-722" y="-93">finished_batches++</label>
 			<nail x="-671" y="-144"/>
 		</transition>
 		<transition id="id56">
@@ -477,7 +480,6 @@ tank23 = Tank(22, cold_wort_batches, green_beer_batches, beer_batches);
 tank24 = Tank(23, cold_wort_batches, green_beer_batches, beer_batches);
 
 system Scheduler, Mashing, Lautering, boiling, whirlpooling, Filtering, tank1, tank2, tank3, tank4, tank5, tank6, tank7, tank8, tank9, tank10, tank11, tank12, tank13, tank14, tank15, tank16, tank17, tank18, tank19, tank20, tank21, tank22, tank23, tank24;</system>
-
 	<queries>
 		<query>
 			<formula>A[] not deadlock</formula>
