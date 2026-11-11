@@ -1,0 +1,104 @@
+[
+  {
+    "source": "Clock.states.Running",
+    "uppaal_id": "Clock_Running"
+  },
+  {
+    "source": "Clock.transitions.0",
+    "requirement": null,
+    "source_id": "Clock_Running",
+    "target_id": "Clock_Running"
+  },
+  {
+    "source": "Operator.states.BeforeStop",
+    "uppaal_id": "Operator_BeforeStop"
+  },
+  {
+    "source": "Operator.states.Stopped",
+    "uppaal_id": "Operator_Stopped"
+  },
+  {
+    "source": "Operator.states.Resumed",
+    "uppaal_id": "Operator_Resumed"
+  },
+  {
+    "source": "Operator.transitions.0",
+    "requirement": "STOP-1",
+    "source_id": "Operator_BeforeStop",
+    "target_id": "Operator_Stopped"
+  },
+  {
+    "source": "Operator.transitions.1",
+    "requirement": "STOP-2",
+    "source_id": "Operator_Stopped",
+    "target_id": "Operator_Resumed"
+  },
+  {
+    "source": "Batch.states.Ready",
+    "uppaal_id": "Batch_Ready"
+  },
+  {
+    "source": "Batch.states.Transfer",
+    "uppaal_id": "Batch_Transfer"
+  },
+  {
+    "source": "Batch.states.Receiving",
+    "uppaal_id": "Batch_Receiving"
+  },
+  {
+    "source": "Batch.states.Completed",
+    "uppaal_id": "Batch_Completed"
+  },
+  {
+    "source": "Batch.states.Spoiled",
+    "uppaal_id": "Batch_Spoiled"
+  },
+  {
+    "source": "Batch.transitions.0",
+    "requirement": null,
+    "source_id": "Batch_Ready",
+    "target_id": "Batch_Ready"
+  },
+  {
+    "source": "Batch.transitions.1",
+    "requirement": "TRANSFER-1",
+    "source_id": "Batch_Ready",
+    "target_id": "Batch_Transfer"
+  },
+  {
+    "source": "Batch.transitions.2",
+    "requirement": "HOLD-1",
+    "source_id": "Batch_Ready",
+    "target_id": "Batch_Spoiled"
+  },
+  {
+    "source": "Batch.transitions.3",
+    "requirement": "STOP-1",
+    "source_id": "Batch_Transfer",
+    "target_id": "Batch_Transfer"
+  },
+  {
+    "source": "Batch.transitions.4",
+    "requirement": "TRANSFER-2",
+    "source_id": "Batch_Transfer",
+    "target_id": "Batch_Receiving"
+  },
+  {
+    "source": "Batch.transitions.5",
+    "requirement": "HOLD-1",
+    "source_id": "Batch_Transfer",
+    "target_id": "Batch_Spoiled"
+  },
+  {
+    "source": "Batch.transitions.6",
+    "requirement": "STOP-1",
+    "source_id": "Batch_Receiving",
+    "target_id": "Batch_Receiving"
+  },
+  {
+    "source": "Batch.transitions.7",
+    "requirement": "OUTPUT-1",
+    "source_id": "Batch_Receiving",
+    "target_id": "Batch_Completed"
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "mash"
+  },
+  "spec": {
+    "clusterIP": "None",
+    "selector": {
+      "app": "machine",
+      "machine-type": "mash"
+    },
+    "ports": [
+      {
+        "port": 1883,
+        "name": "identity"
+      }
+    ]
+  }
+}

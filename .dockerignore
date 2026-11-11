@@ -1,0 +1,10 @@
+.git
+**/node_modules
+**/target
+**/__pycache__
+**/build
+**/.venv
+**/.env
+report
+src/experiment/results
+src/models/results

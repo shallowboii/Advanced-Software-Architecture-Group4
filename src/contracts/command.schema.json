@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Equipment command v2: technical instructions only",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "cmd",
+    "command_id",
+    "epoch"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "message_id": {
+      "type": "string"
+    },
+    "command_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "machine_id": {
+      "type": "string",
+      "pattern": "^(mash|lauter|kettle|whirlpool|unitank|filter)-[0-9]+$"
+    },
+    "controller_boot_id": {
+      "type": "string"
+    },
+    "cmd": {
+      "enum": [
+        "PERMIT",
+        "START",
+        "PROCESS",
+        "PREPARE_TRANSFER",
+        "EXECUTE_TRANSFER",
+        "COMMIT_TRANSFER",
+        "ABORT_TRANSFER",
+        "RELEASE",
+        "STOP",
+        "RESUME",
+        "FLUSH",
+        "SNAPSHOT"
+      ]
+    },
+    "epoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "expected_state_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "duration_h": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "target_temp_c": {
+      "type": "number"
+    },
+    "role": {
+      "enum": [
+        "source",
+        "target"
+      ]
+    },
+    "scope": {
+      "enum": [
+        "local",
+        "global"
+      ]
+    },
+    "permit_ms": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "sim_time_h": {
+      "type": "number",
+      "minimum": 0
+    },
+    "time_scale": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "ts_utc": {
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "cmd": {
+            "enum": [
+              "START",
+              "PROCESS",
+              "PREPARE_TRANSFER",
+              "EXECUTE_TRANSFER",
+              "COMMIT_TRANSFER",
+              "ABORT_TRANSFER",
+              "RELEASE",
+              "FLUSH"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "machine_id",
+          "controller_boot_id",
+          "expected_state_version"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "cmd": {
+            "enum": [
+              "START",
+              "PROCESS"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "duration_h",
+          "target_temp_c"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "cmd": {
+            "const": "EXECUTE_TRANSFER"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "duration_h"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "cmd": {
+            "const": "PREPARE_TRANSFER"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "role"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "cmd": {
+            "const": "PERMIT"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "machine_id",
+          "controller_boot_id",
+          "permit_ms",
+          "sim_time_h",
+          "time_scale"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "cmd": {
+            "enum": [
+              "STOP",
+              "RESUME"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "scope"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Equipment observation v2: no batch or recipe metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "machine_id",
+    "controller_boot_id",
+    "event",
+    "event_id",
+    "machine_sequence",
+    "snapshot"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "machine_id": {
+      "type": "string",
+      "pattern": "^(mash|lauter|kettle|whirlpool|unitank|filter)-[0-9]+$"
+    },
+    "type": {
+      "enum": [
+        "mash",
+        "lauter",
+        "kettle",
+        "whirlpool",
+        "unitank",
+        "filter"
+      ]
+    },
+    "controller_boot_id": {
+      "type": "string"
+    },
+    "current_command_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "interrupted_command_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ts_utc": {
+      "type": "string"
+    },
+    "machine_sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "sim_time_h": {
+      "type": "number",
+      "minimum": 0
+    },
+    "event_id": {
+      "type": "string"
+    },
+    "message_id": {
+      "type": "string"
+    },
+    "event": {
+      "enum": [
+        "PROCESS_STARTED",
+        "PROCESS_COMPLETED",
+        "TRANSFER_PREPARED",
+        "TRANSFER_READY",
+        "TRANSFER_COMMITTED",
+        "TRANSFER_ABORTED",
+        "RELEASED",
+        "STOPPED",
+        "RESUMED",
+        "FLUSH_REQUESTED",
+        "FLUSHED",
+        "REJECTED",
+        "SNAPSHOT"
+      ]
+    },
+    "command_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "scope": {
+      "enum": [
+        "local",
+        "global"
+      ]
+    },
+    "contents_discarded": {
+      "type": "boolean"
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "machine_id",
+        "controller_boot_id",
+        "state",
+        "occupied",
+        "state_version"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 2
+        },
+        "machine_id": {
+          "type": "string",
+          "pattern": "^(mash|lauter|kettle|whirlpool|unitank|filter)-[0-9]+$"
+        },
+        "type": {
+          "enum": [
+            "mash",
+            "lauter",
+            "kettle",
+            "whirlpool",
+            "unitank",
+            "filter"
+          ]
+        },
+        "controller_boot_id": {
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "EMPTY",
+            "READY",
+            "PROCESSING",
+            "RESERVED_IN",
+            "TRANSFERRING_IN",
+            "TRANSFERRING_OUT",
+            "FLUSH_PENDING",
+            "FLUSHING"
+          ]
+        },
+        "current_command_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "interrupted_command_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "transfer_role": {
+          "enum": [
+            "source",
+            "target",
+            null
+          ]
+        },
+        "ts_utc": {
+          "type": "string"
+        },
+        "occupied": {
+          "type": "boolean"
+        },
+        "duration_h": {
+          "type": "number",
+          "minimum": 0
+        },
+        "elapsed_h": {
+          "type": "number",
+          "minimum": 0
+        },
+        "target_temp_c": {
+          "type": "number"
+        },
+        "transfer_ready": {
+          "type": "boolean"
+        },
+        "flush_requested": {
+          "type": "boolean"
+        },
+        "local_stop": {
+          "type": "boolean"
+        },
+        "global_stop": {
+          "type": "boolean"
+        },
+        "stopped": {
+          "type": "boolean"
+        },
+        "permit_valid": {
+          "type": "boolean"
+        },
+        "epoch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "state_version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "machine_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sim_time_h": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}
