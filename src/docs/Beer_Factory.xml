@@ -28,7 +28,11 @@ broadcast chan start_maturation_fermentation;
 // Finished batches?
 int started_batches = 0;
 const int MAX_BATCHES = 50;
-int[0, MAX_BATCHES] finished_batches = 0;</declaration>
+int[0, MAX_BATCHES] finished_batches = 0;
+
+
+// WHIRLPOOLING things :)
+const int MAX_WHIRLPOOLED_BATCHES = 1;</declaration>
 	<template>
 		<name>Scheduler</name>
 		<location id="id0" x="0" y="0">
@@ -244,13 +248,8 @@ take_sweet_wort()</label>
 		<parameter>int &amp;unwhirlpooled_beer_batch, int &amp;whirlpooled_beer_batch</parameter>
 		<declaration>clock a;
 
-// Same time unit as the rest of the model
-const int T_SPINUP   = 1;   // motor reaches whirlpool speed
-const int T_WHIRL    = 15;  // whirlpool spinning time
-const int T_SPINDOWN = 1;   // motor stops
 
-const int SPEED_WHIRL = 100;
-int spin = 0;               // current motor speed (0 = stopped)
+const int T_WHIRLPOOLING = 1; //meaning one hour
 
 void reset() {
     a = 0;
@@ -260,61 +259,32 @@ void start_whirlpooling() {
     unwhirlpooled_beer_batch--;
 }
 
-void spinup() {
-    spin = SPEED_WHIRL;
-}
-
-void spindown() {
-    spin = 0;
-}
-
 void stop_whirlpooling() {
     whirlpooled_beer_batch++;
 }</declaration>
-		<location id="id34" x="-400" y="0">
-			<name x="-420" y="-34">Wait</name>
+		<location id="id34" x="-483" y="1">
+			<name x="-502" y="-33">Wait</name>
 		</location>
-		<location id="id35" x="-200" y="0">
-			<name x="-220" y="-34">SpinUp</name>
-			<label kind="invariant" x="-230" y="17">a &lt;= T_SPINUP</label>
-		</location>
-		<location id="id36" x="0" y="0">
-			<name x="-30" y="-34">Whirlpool</name>
-			<label kind="invariant" x="-30" y="17">a &lt;= T_WHIRL</label>
-		</location>
-		<location id="id37" x="200" y="0">
-			<name x="170" y="-34">SpinDown</name>
-			<label kind="invariant" x="170" y="17">a &lt;= T_SPINDOWN</label>
+		<location id="id35" x="-68" y="1">
+			<name x="-76" y="-33">Whirlpool</name>
+			<label kind="invariant" x="-93" y="18">c &lt;= T_WHIRLPOOLING</label>
 		</location>
 		<init ref="id34"/>
-		<transition id="id38">
-			<source ref="id37"/>
+		<transition id="id36">
+			<source ref="id35"/>
 			<target ref="id34"/>
-			<label kind="guard" x="-50" y="110">a &gt;= T_SPINDOWN</label>
-			<label kind="synchronisation" x="-50" y="127">done_whirlpool!</label>
-			<label kind="assignment" x="-50" y="144">spindown(),
-stop_whirlpooling()</label>
-			<nail x="200" y="100"/>
-			<nail x="-400" y="100"/>
+			<label kind="guard" x="-518" y="93">c &gt;= T_WHIRLPOOLING</label>
+			<label kind="synchronisation" x="-518" y="110">done_whirlpooling!</label>
+			<label kind="assignment" x="-518" y="127">stop_whirlpooling()</label>
+			<nail x="-332" y="111"/>
 		</transition>
-		<transition id="id39">
+		<transition id="id37">
 			<source ref="id34"/>
 			<target ref="id35"/>
-			<label kind="synchronisation" x="-370" y="-68">start_whirlpool?</label>
-			<label kind="assignment" x="-370" y="-51">reset(),
+			<label kind="guard" x="-442" y="-76">unwhirlpooled_beer_batch &gt;= 1 &amp;&amp; whirlpooled_beer_batch &lt; MAX_WHIRLPOOLED_BATCHES</label>
+			<label kind="synchronisation" x="-442" y="-93">start_whirlpooling?</label>
+			<label kind="assignment" x="-442" y="-59">reset(),
 start_whirlpooling()</label>
-		</transition>
-		<transition id="id40">
-			<source ref="id35"/>
-			<target ref="id36"/>
-			<label kind="guard" x="-170" y="-51">a &gt;= T_SPINUP</label>
-			<label kind="assignment" x="-170" y="-34">spinup(), reset()</label>
-		</transition>
-		<transition id="id41">
-			<source ref="id36"/>
-			<target ref="id37"/>
-			<label kind="guard" x="30" y="-51">a &gt;= T_WHIRL</label>
-			<label kind="assignment" x="30" y="-34">reset()</label>
 		</transition>
 	</template>
 	<template>
@@ -428,9 +398,9 @@ const int T_FILTERING = 4;
 			<label kind="assignment" x="-646" y="-161">finished_batches++</label>
 			<nail x="-671" y="-144"/>
 		</transition>
-		<transition id="id54">
-			<source ref="id51"/>
-			<target ref="id52"/>
+		<transition id="id50">
+			<source ref="id47"/>
+			<target ref="id48"/>
 			<label kind="guard" x="-773" y="-297">finished_tanks &gt; 0</label>
 			<label kind="synchronisation" x="-773" y="-314">start_filtering?</label>
 			<label kind="assignment" x="-739" y="-263">c = 0,
