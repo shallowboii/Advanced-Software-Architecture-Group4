@@ -10,7 +10,7 @@ const int MAX_TANKS = 24;
 // Lautering channels
 urgent chan start_lauter;
 broadcast chan done_lauter;
-int wort_batches = 0;   // Mashing -> Lautering
+int wort_batches = 0;
 
 int chosen_tank = -1;
 int finished_tanks = 0;
@@ -208,12 +208,7 @@ is_mashing = false</label>
 	<template>
 		<name>Lautering</name>
 		<declaration>clock x;
-const int T_LAUTER = 2;   // hours (FR-10)
-
-// Matches the Lautering state machine (draw.io):
-//   Wait --[has wort] / start lautering--&gt; Lauter
-//   Lauter: entry / take wort, do / lauter wort (2 h)
-//   Lauter --make sweet wort / stop lautering--&gt; Wait
+const int T_LAUTER = 2;
 
 bool has_wort() {
     return wort_batches &gt;= 1;
