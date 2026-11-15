@@ -10,6 +10,7 @@ const int MAX_TANKS = 24;
 // Lautering channels
 urgent chan start_lauter;
 broadcast chan done_lauter;
+int wort_batches = 0;   // Mashing -> Lautering
 
 int chosen_tank = -1;
 int finished_tanks = 0;
@@ -199,7 +200,7 @@ is_mashing = true</label>
 			<target ref="id22"/>
 			<label kind="guard" x="-127" y="42">c&gt;=T_MASHING</label>
 			<label kind="synchronisation" x="-85" y="25">done_mashing!</label>
-			<label kind="assignment" x="-136" y="59">sweet_wort_batches++,
+			<label kind="assignment" x="-136" y="59">wort_batches++,
 is_mashing = false</label>
 			<nail x="-102" y="42"/>
 		</transition>
@@ -207,9 +208,26 @@ is_mashing = false</label>
 	<template>
 		<name>Lautering</name>
 		<declaration>clock x;
-const int T_LAUTER = 2;</declaration>
+const int T_LAUTER = 2;   // hours (FR-10)
+
+// Matches the Lautering state machine (draw.io):
+//   Wait --[has wort] / start lautering--&gt; Lauter
+//   Lauter: entry / take wort, do / lauter wort (2 h)
+//   Lauter --make sweet wort / stop lautering--&gt; Wait
+
+bool has_wort() {
+    return wort_batches &gt;= 1;
+}
+
+void take_wort() {
+    wort_batches--;
+}
+
+void make_sweet_wort() {
+    sweet_wort_batches++;
+}</declaration>
 		<location id="id26" x="-34" y="-25">
-			<name x="-44" y="-59">Idle</name>
+			<name x="-44" y="-59">Wait</name>
 		</location>
 		<location id="id27" x="161" y="-25">
 			<name x="151" y="-59">Lauter</name>
@@ -219,14 +237,17 @@ const int T_LAUTER = 2;</declaration>
 		<transition id="id28">
 			<source ref="id26"/>
 			<target ref="id27"/>
+			<label kind="guard" x="-16" y="-59">has_wort()</label>
 			<label kind="synchronisation" x="-16" y="-42">start_lauter?</label>
-			<label kind="assignment" x="-16" y="-25">x=0</label>
+			<label kind="assignment" x="-16" y="-25">x = 0,
+take_wort()</label>
 		</transition>
 		<transition id="id29">
 			<source ref="id27"/>
 			<target ref="id26"/>
-			<label kind="guard" x="76" y="34">x == T_LAUTER</label>
+			<label kind="guard" x="76" y="34">x &gt;= T_LAUTER</label>
 			<label kind="synchronisation" x="76" y="51">done_lauter!</label>
+			<label kind="assignment" x="76" y="68">make_sweet_wort()</label>
 			<nail x="68" y="144"/>
 		</transition>
 	</template>
