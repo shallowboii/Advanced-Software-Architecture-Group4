@@ -69,10 +69,11 @@ tank_result_t tank_update(tank_t *tank, uint64_t now_seconds) {
   tank_shared_t *shared = tank->shared;
   const uint64_t elapsed = now_seconds - tank->started_at_seconds;
 
-  // WTH is happening here??
+  // if tank has done fermentating
   if (tank->state == TANK_FERMENTATION &&
       elapsed >= TANK_FERMENTATION_SECONDS) {
     tank->state = TANK_MATURATION;
+  // if tank has done maturation
   } else if (tank->state == TANK_MATURATION && elapsed >= TANK_TOTAL_SECONDS) {
     shared->beer_batches++;
     shared->tanks_status[tank->tank_idx] = false;
@@ -80,6 +81,7 @@ tank_result_t tank_update(tank_t *tank, uint64_t now_seconds) {
     shared->finished_tanks++;
     shared->almost_done[tank->tank_idx] = false;
     tank->state = TANK_WAIT;
+  // if tank has ALMOST done maturation
   } else if (tank->state == TANK_MATURATION &&
              elapsed >= TANK_ALMOST_DONE_SECONDS) {
     shared->almost_done[tank->tank_idx] = true;
