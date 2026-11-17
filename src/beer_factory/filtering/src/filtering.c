@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdbool.h>
 
+#include "machine.h"
+
 #define T_FILTERING 4
 
 typedef enum { WAIT , FILTERING } State;
@@ -8,24 +10,32 @@ typedef enum { WAIT , FILTERING } State;
 typedef struct {
     State state;
     int c; //clock
+    int duration;
     int beer_batches; //btches to be filtered
     int finished_batches; //completely done
-} FilterMachine;
+} Filtering;
 
 //Setting up machine
-void init_filter(FilterMachine *m) {
+static void init(void *self) {
+    Filtering *m = self;
     m->state = WAIT;
     m->c = 0;
+    m->duration = T_FILTERING;
     m->beer_batches=0;
     m->finished_batches=0;
 }
 
-//Add batch
-void add_batch(FilterMachine *m) {
-    m->beer_batches++;
+static int duration(const void *self) { 
+    return ((const Filtering *)self)->duration; 
 }
 
-bool start_filtering(FilterMachine *m) {
+//Add batch
+static void add_batch(void *self) {
+    ((Filtering *)self)->beer_batches++;
+}
+
+static bool start(void *self) {
+    Filtering *m = self;
     if (m->state == WAIT && m->beer_batches>0) {
         m->c = 0;
         m->beer_batches--;
@@ -35,16 +45,23 @@ bool start_filtering(FilterMachine *m) {
     return false;
 }
 
-bool done_filtering(FilterMachine *m) {
-    if (m->state == FILTERING && m->c >= T_FILTERING) {
-        finished_batches++;
-        state = WAIT;
+static bool done(void *self) {
+    Filtering *m = self;
+    if (m->state == FILTERING && m->c >= m->duration) {
+        m->finished_batches++;
+        m->state = WAIT;
         return true;
     }
     return false;
 }
 
 //Making time pass while filtering
-void tick(FilterMachine *m) {
+static void tick(void *self) {
+    Filtering *m = self;
     if (m->state == FILTERING) m->c++;
 }
+
+const MachineType FILTERING_TYPE = {
+    "6 Filtering", 1, sizeof(Filtering),
+    init, duration, add, start, done, tick
+};
