@@ -11,7 +11,7 @@ typedef struct {
     State state;
     int c; //clock
     int duration;
-    int beer_batches; //btches to be filtered
+    int beer_batches; //batches to be filtered
     int finished_batches; //completely done
 } Filtering;
 
@@ -63,5 +63,5 @@ static void tick(void *self) {
 
 const MachineType FILTERING_TYPE = {
     "6 Filtering", 1, sizeof(Filtering),
-    init, duration, add, start, done, tick
+    init, duration, add_batch, start, done, tick
 };
