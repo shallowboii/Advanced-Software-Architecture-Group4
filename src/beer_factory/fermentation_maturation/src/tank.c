@@ -3,10 +3,6 @@
 #include <stddef.h>
 
 tank_result_t tank_shared_init(tank_shared_t *shared) {
-  if (shared == NULL) {
-    return TANK_INVALID_ARGUMENT;
-  }
-
   *shared = (tank_shared_t){.free_tank = TANK_MAX_TANKS, .chosen_tank = -1};
   return TANK_OK;
 }
