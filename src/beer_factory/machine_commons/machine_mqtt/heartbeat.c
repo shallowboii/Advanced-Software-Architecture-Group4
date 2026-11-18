@@ -19,6 +19,8 @@
 #define SENDBUFSZ 2048
 #define RECVBUFSZ 2048
 
+#define HEARTBEAT_INTERVAL_S 5
+
 #define MQTT_HOST "localhost"
 #define MQTT_PORT "1883"
 #define MQTT_NAME "boiling-1"
@@ -27,6 +29,9 @@ int mqtt_fd;
 int mqtt_machine_idx;
 struct mqtt_client client;
 uint8_t sendbuf[SENDBUFSZ], recvbuf[RECVBUFSZ];
+
+uint64_t last_heartbeat_s = 0;
+enum MQTTErrors mqtt_result = MQTT_OK;
 
 /* Finish nonblocking TCP connection attempts within five seconds per address.
  */
@@ -69,14 +74,15 @@ static int connect_broker(const char *host, const char *port) {
   return fd;
 }
 
-enum MQTTErrors heartbeat_init(int machine_idx) {
+enum MQTTErrors *heartbeat_init(int machine_idx) {
   mqtt_machine_idx = machine_idx;
 
   int fd = connect_broker(MQTT_HOST, MQTT_PORT);
   if (fd < 0) {
     fprintf(stderr, "Could not connect to MQTT broker %s:%s.\n", MQTT_HOST,
             MQTT_PORT);
-    return MQTT_ERROR_SOCKET_ERROR;
+    mqtt_result = MQTT_ERROR_SOCKET_ERROR;
+    return &mqtt_result;
   }
 
   /*
@@ -85,12 +91,12 @@ enum MQTTErrors heartbeat_init(int machine_idx) {
    *   NULL: no callback for incoming published messages; we only send
    * heartbeats.
    */
-  enum MQTTErrors result =
+  mqtt_result =
       mqtt_init(&client, fd, sendbuf, SENDBUFSZ, recvbuf, RECVBUFSZ, NULL);
 
-  if (result != MQTT_OK) {
+  if (mqtt_result != MQTT_OK) {
     close(fd);
-    return result;
+    return &mqtt_result;
   }
 
   /*
@@ -110,9 +116,8 @@ enum MQTTErrors heartbeat_init(int machine_idx) {
    */
   char machine_name[50];
   snprintf(machine_name, sizeof(machine_name), "BOILING-%i", machine_idx);
-  enum MQTTErrors mqtt_result =
-      mqtt_connect(&client, machine_name, NULL, NULL, 0, NULL, NULL,
-                   MQTT_CONNECT_CLEAN_SESSION, 60);
+  mqtt_result = mqtt_connect(&client, machine_name, NULL, NULL, 0, NULL, NULL,
+                             MQTT_CONNECT_CLEAN_SESSION, 60);
 
   if (mqtt_result != MQTT_OK) {
     fprintf(stderr, "MQTT initialization: %s\n", mqtt_error_str(mqtt_result));
@@ -121,16 +126,18 @@ enum MQTTErrors heartbeat_init(int machine_idx) {
   }
 
   mqtt_fd = fd;
-  return mqtt_result;
+  return &mqtt_result;
 }
 
-enum MQTTErrors heartbeat_send(const char *topic) {
+enum MQTTErrors *heartbeat_send(const char *topic) {
   machine_heartbeat_t hb = {
       .timestamp = time(NULL),
       .machine_idx = mqtt_machine_idx,
   };
 
-  return mqtt_publish(&client, topic, &hb, sizeof(hb), MQTT_PUBLISH_QOS_1);
+  mqtt_result =
+      mqtt_publish(&client, topic, &hb, sizeof(hb), MQTT_PUBLISH_QOS_1);
+  return &mqtt_result;
 }
 
 void heartbeat_destroy() {
@@ -142,4 +149,31 @@ void heartbeat_destroy() {
   close(mqtt_fd);
 }
 
-enum MQTTErrors heartbeat_sync() { return mqtt_sync(&client); }
+enum MQTTErrors *heartbeat_sync() {
+  mqtt_result = mqtt_sync(&client);
+  return &mqtt_result;
+}
+
+enum MQTTErrors *heartbeat_update(const char *topic, uint64_t now_s) {
+  uint64_t elapsed_s = (uint64_t)(now_s - last_heartbeat_s);
+
+  if (mqtt_result == MQTT_OK) {
+    if (elapsed_s >= HEARTBEAT_INTERVAL_S) {
+      heartbeat_send(topic);
+      last_heartbeat_s = now_s;
+    }
+
+    if (mqtt_result == MQTT_OK) {
+      heartbeat_sync();
+    }
+
+    if (mqtt_result != MQTT_OK) {
+      fprintf(stderr, "Error while handling heartbeats: %s.\n",
+              mqtt_error_str(mqtt_result));
+    }
+  }
+
+  return &mqtt_result;
+}
+
+enum MQTTErrors *heartbeat_status() { return &mqtt_result; }

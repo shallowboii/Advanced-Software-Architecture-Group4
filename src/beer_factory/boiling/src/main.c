@@ -20,7 +20,10 @@ int main(int argc, char **argv) {
   }
 
   long machine_number = atoi(argv[1]);
-  enum MQTTErrors mqtt_result = heartbeat_init(machine_number);
+  enum MQTTErrors *mqtt_result = heartbeat_init(machine_number);
+  if (*mqtt_result != MQTT_OK) {
+    printf("Could not start MQTT!\n");
+  }
 
   struct timespec started;
   if (clock_gettime(CLOCK_MONOTONIC, &started) != 0) {
@@ -35,7 +38,6 @@ int main(int argc, char **argv) {
   (void)boiling_start(&boiling, 0);
   printf("Boiling started\n");
 
-  uint64_t next_heartbeat_s = 0;
   int status = EXIT_SUCCESS;
   while (1) {
     struct timespec now;
@@ -45,29 +47,13 @@ int main(int argc, char **argv) {
       break;
     }
 
-    uint64_t elapsed_s = (uint64_t)(now.tv_sec - started.tv_sec);
     if (boiling.state == BOILING_BOIL &&
-        boiling_update(&boiling, elapsed_s) == BOILING_DONE) {
+        boiling_update(&boiling, now.tv_sec) == BOILING_DONE) {
       printf("Boiling complete; waiting.");
     }
 
     // Are we connected?
-    if (mqtt_result == MQTT_OK) {
-      if (elapsed_s >= next_heartbeat_s) {
-        mqtt_result = heartbeat_send("boiling");
-        next_heartbeat_s = elapsed_s + 5;
-      }
-
-      if (mqtt_result == MQTT_OK) {
-        mqtt_result = heartbeat_sync();
-      }
-
-      if (mqtt_result != MQTT_OK) {
-        fprintf(stderr, "Error while handling heartbeats: %s.\n",
-                mqtt_error_str(mqtt_result));
-      }
-    }
-
+    heartbeat_update("boiling", now.tv_sec);
     sleep(1);
   }
 

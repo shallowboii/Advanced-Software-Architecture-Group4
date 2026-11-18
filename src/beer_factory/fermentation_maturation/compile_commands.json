@@ -1,0 +1,62 @@
+[
+  {
+    "file": "src/main.c",
+    "arguments": [
+      "/usr/bin/cc",
+      "-Isrc",
+      "-I../machine_commons/machine_mqtt",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-O2",
+      "src/main.c",
+      "-pthread",
+      "-o",
+      "build/tank-mqtt"
+    ],
+    "directory": "/Users/nicola/Workspace/Advanced-Software-Architecture-Group4/src/beer_factory/fermentation_maturation",
+    "output": "build/tank-mqtt"
+  },
+  {
+    "file": "src/tank.c",
+    "arguments": [
+      "/usr/bin/cc",
+      "-Isrc",
+      "-I../machine_commons/machine_mqtt",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-O2",
+      "src/tank.c",
+      "-pthread",
+      "-o",
+      "build/tank-mqtt"
+    ],
+    "directory": "/Users/nicola/Workspace/Advanced-Software-Architecture-Group4/src/beer_factory/fermentation_maturation",
+    "output": "build/tank-mqtt"
+  },
+  {
+    "file": "../machine_commons/machine_mqtt/heartbeat.c",
+    "arguments": [
+      "/usr/bin/cc",
+      "-Isrc",
+      "-I../machine_commons/machine_mqtt",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-O2",
+      "../machine_commons/machine_mqtt/heartbeat.c",
+      "-pthread",
+      "-o",
+      "build/tank-mqtt"
+    ],
+    "directory": "/Users/nicola/Workspace/Advanced-Software-Architecture-Group4/src/beer_factory/fermentation_maturation",
+    "output": "build/tank-mqtt"
+  }
+]

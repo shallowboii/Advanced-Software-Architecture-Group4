@@ -7,8 +7,7 @@ tank_result_t tank_shared_init(tank_shared_t *shared) {
   return TANK_OK;
 }
 
-tank_result_t tank_init(tank_t *tank, tank_shared_t *shared,
-                        unsigned int tank_idx) {
+tank_result_t tank_init(tank_t *tank, tank_shared_t *shared, int tank_idx) {
   if (tank_idx >= TANK_MAX_TANKS || shared->tanks_status[tank_idx] ||
       shared->almost_done[tank_idx]) {
     return TANK_INVALID_ARGUMENT;
@@ -73,7 +72,7 @@ tank_result_t tank_update(tank_t *tank, uint64_t now_seconds) {
   if (tank->state == TANK_FERMENTATION &&
       elapsed >= TANK_FERMENTATION_SECONDS) {
     tank->state = TANK_MATURATION;
-  // if tank has done maturation
+    // if tank has done maturation
   } else if (tank->state == TANK_MATURATION && elapsed >= TANK_TOTAL_SECONDS) {
     shared->beer_batches++;
     shared->tanks_status[tank->tank_idx] = false;
@@ -81,7 +80,7 @@ tank_result_t tank_update(tank_t *tank, uint64_t now_seconds) {
     shared->finished_tanks++;
     shared->almost_done[tank->tank_idx] = false;
     tank->state = TANK_WAIT;
-  // if tank has ALMOST done maturation
+    // if tank has ALMOST done maturation
   } else if (tank->state == TANK_MATURATION &&
              elapsed >= TANK_ALMOST_DONE_SECONDS) {
     shared->almost_done[tank->tank_idx] = true;
@@ -91,7 +90,7 @@ tank_result_t tank_update(tank_t *tank, uint64_t now_seconds) {
 }
 
 bool tank_any_almost_done(const tank_shared_t *shared) {
-  for (unsigned int i = 0; i < TANK_MAX_TANKS; i++) {
+  for (int i = 0; i < TANK_MAX_TANKS; i++) {
     if (shared->almost_done[i]) {
       return true;
     }
