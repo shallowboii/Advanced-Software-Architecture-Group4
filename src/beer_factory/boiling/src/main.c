@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <netdb.h>
 #include <poll.h>
 #include <stdio.h>
@@ -12,8 +13,14 @@
 #include <time.h>
 #include <unistd.h>
 
-int main(void) {
-  enum MQTTErrors mqtt_result = heartbeat_init("BOILING-01");
+int main(int argc, char **argv) {
+  if (argc != 2) {
+    fprintf(stderr, "Usage: %s <machine-number>\n", argv[0]);
+    return EXIT_FAILURE;
+  }
+
+  long machine_number = atoi(argv[1]);
+  enum MQTTErrors mqtt_result = heartbeat_init(machine_number);
 
   struct timespec started;
   if (clock_gettime(CLOCK_MONOTONIC, &started) != 0) {

@@ -24,7 +24,7 @@
 #define MQTT_NAME "boiling-1"
 
 int mqtt_fd;
-char *mqtt_machine_name;
+int mqtt_machine_idx;
 struct mqtt_client client;
 uint8_t sendbuf[SENDBUFSZ], recvbuf[RECVBUFSZ];
 
@@ -69,17 +69,8 @@ static int connect_broker(const char *host, const char *port) {
   return fd;
 }
 
-enum MQTTErrors heartbeat_init(char *machine_name) {
-  if (machine_name == NULL) {
-    abort();
-  }
-
-  size_t length = strlen(machine_name);
-  if (length >= MAX_MACHINE_NAME_LEN) {
-    abort();
-  }
-
-  mqtt_machine_name = machine_name;
+enum MQTTErrors heartbeat_init(int machine_idx) {
+  mqtt_machine_idx = machine_idx;
 
   int fd = connect_broker(MQTT_HOST, MQTT_PORT);
   if (fd < 0) {
@@ -117,6 +108,8 @@ enum MQTTErrors heartbeat_init(char *machine_name) {
    * loss. Call mqtt_sync regularly to transmit the request, process the
    * broker's response, and maintain the connection.
    */
+  char machine_name[50];
+  snprintf(machine_name, sizeof(machine_name), "BOILING-%i", machine_idx);
   enum MQTTErrors mqtt_result =
       mqtt_connect(&client, machine_name, NULL, NULL, 0, NULL, NULL,
                    MQTT_CONNECT_CLEAN_SESSION, 60);
@@ -134,9 +127,9 @@ enum MQTTErrors heartbeat_init(char *machine_name) {
 enum MQTTErrors heartbeat_send(const char *topic) {
   machine_heartbeat_t hb = {
       .timestamp = time(NULL),
+      .machine_idx = mqtt_machine_idx,
   };
 
-  memcpy(hb.machine_name, mqtt_machine_name, strlen(mqtt_machine_name));
   return mqtt_publish(&client, topic, &hb, sizeof(hb), MQTT_PUBLISH_QOS_1);
 }
 

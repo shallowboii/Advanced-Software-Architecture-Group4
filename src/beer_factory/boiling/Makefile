@@ -8,7 +8,7 @@ MQTT_C_DIR ?=
 MQTT_LIBS ?= -lmqttc
 PYTHON ?= python3
 
-.PHONY: all test mqtt test-mqtt clean
+.PHONY: all test test-controller mqtt test-mqtt clean
 
 all: build/boiling-mqtt
 
@@ -18,8 +18,15 @@ build:
 build/test-boiling: src/boiling.c src/boiling.h tests/test_boiling.c | build
 	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) src/boiling.c tests/test_boiling.c $(LDFLAGS) $(LDLIBS) -o $@
 
-test: build/test-boiling
+test: build/test-boiling test-controller
 	./build/test-boiling
+
+# Simulate heartbeat I/O and elapsed time without a broker or MQTT-C library.
+build/test-controller: src/main.c src/boiling.c src/boiling.h tests/controller_stubs.c $(MQTT_COMMONS)/heartbeat.h $(MQTT_COMMONS)/mqtt.h $(MQTT_COMMONS)/mqtt_pal.h | build
+	$(CC) $(CPPFLAGS) -Isrc -I$(MQTT_COMMONS) $(CFLAGS) -Wno-strict-prototypes -Dclock_gettime=test_clock_gettime -Dsleep=test_sleep src/main.c src/boiling.c tests/controller_stubs.c $(LDFLAGS) $(LDLIBS) -o $@
+
+test-controller: build/test-controller
+	$(PYTHON) tests/test_controller.py ./build/test-controller
 
 # Use an installed MQTT-C library, or compile a checkout supplied by MQTT_C_DIR.
 ifneq ($(strip $(MQTT_C_DIR)),)
