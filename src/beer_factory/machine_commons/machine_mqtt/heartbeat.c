@@ -23,6 +23,7 @@
 #define MQTT_PORT "1883"
 #define MQTT_NAME "boiling-1"
 
+int mqtt_fd;
 char *mqtt_machine_name;
 struct mqtt_client client;
 uint8_t sendbuf[SENDBUFSZ], recvbuf[RECVBUFSZ];
@@ -68,7 +69,7 @@ static int connect_broker(const char *host, const char *port) {
   return fd;
 }
 
-enum MQTTErrors heartbeat_init(struct mqtt_client *client, char *machine_name) {
+enum MQTTErrors heartbeat_init(char *machine_name) {
   if (machine_name == NULL) {
     abort();
   }
@@ -94,7 +95,7 @@ enum MQTTErrors heartbeat_init(struct mqtt_client *client, char *machine_name) {
    * heartbeats.
    */
   enum MQTTErrors result =
-      mqtt_init(client, fd, sendbuf, SENDBUFSZ, recvbuf, RECVBUFSZ, NULL);
+      mqtt_init(&client, fd, sendbuf, SENDBUFSZ, recvbuf, RECVBUFSZ, NULL);
 
   if (result != MQTT_OK) {
     close(fd);
@@ -117,27 +118,35 @@ enum MQTTErrors heartbeat_init(struct mqtt_client *client, char *machine_name) {
    * broker's response, and maintain the connection.
    */
   enum MQTTErrors mqtt_result =
-      mqtt_connect(client, machine_name, NULL, NULL, 0, NULL, NULL,
+      mqtt_connect(&client, machine_name, NULL, NULL, 0, NULL, NULL,
                    MQTT_CONNECT_CLEAN_SESSION, 60);
 
   if (mqtt_result != MQTT_OK) {
     fprintf(stderr, "MQTT initialization: %s\n", mqtt_error_str(mqtt_result));
-    pthread_mutex_destroy(&client->mutex);
+    pthread_mutex_destroy(&client.mutex);
     close(fd);
   }
 
+  mqtt_fd = fd;
   return mqtt_result;
 }
 
-enum MQTTErrors heartbeat_send(struct mqtt_client *client) {
-  if (client == NULL) {
-    return MQTT_ERROR_NULLPTR;
-  }
-
+enum MQTTErrors heartbeat_send(const char *topic) {
   machine_heartbeat_t hb = {
       .timestamp = time(NULL),
   };
 
   memcpy(hb.machine_name, mqtt_machine_name, strlen(mqtt_machine_name));
-  return mqtt_publish(client, "heartbeat", &hb, sizeof(hb), MQTT_PUBLISH_QOS_1);
+  return mqtt_publish(&client, topic, &hb, sizeof(hb), MQTT_PUBLISH_QOS_1);
 }
+
+void heartbeat_destroy() {
+  if (mqtt_disconnect(&client) == MQTT_OK) {
+    (void)mqtt_sync(&client);
+  }
+
+  pthread_mutex_destroy(&client.mutex);
+  close(mqtt_fd);
+}
+
+enum MQTTErrors heartbeat_sync() { return mqtt_sync(&client); }
