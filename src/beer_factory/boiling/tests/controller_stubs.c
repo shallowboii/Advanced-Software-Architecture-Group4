@@ -11,25 +11,43 @@
 static const time_t ticks[] = {0, 1, 4, 5, 3599, 3600, 3605};
 static size_t tick;
 static unsigned int clock_calls;
+static enum MQTTErrors status;
+static uint64_t next_heartbeat;
 
 static int scenario(const char *name) {
   const char *value = getenv("CONTROLLER_SCENARIO");
   return value != NULL && strcmp(value, name) == 0;
 }
 
-enum MQTTErrors heartbeat_init(int machine_idx) {
+enum MQTTErrors *heartbeat_init(char *prefix, int machine_idx) {
+  if (strcmp(prefix, "BOILING") != 0)
+    abort();
   printf("INIT %d\n", machine_idx);
-  return scenario("init-error") ? MQTT_ERROR_SOCKET_ERROR : MQTT_OK;
+  status = scenario("init-error") ? MQTT_ERROR_SOCKET_ERROR : MQTT_OK;
+  return &status;
 }
 
-enum MQTTErrors heartbeat_send(const char *topic) {
-  printf("SEND %ld %s\n", (long)ticks[tick], topic);
-  return scenario("send-error") ? MQTT_ERROR_SOCKET_ERROR : MQTT_OK;
-}
+enum MQTTErrors *heartbeat_status(void) { return &status; }
 
-enum MQTTErrors heartbeat_sync(void) {
+enum MQTTErrors *heartbeat_sync(void) {
   printf("SYNC %ld\n", (long)ticks[tick]);
-  return scenario("sync-error") ? MQTT_ERROR_SOCKET_ERROR : MQTT_OK;
+  status = scenario("sync-error") ? MQTT_ERROR_SOCKET_ERROR : MQTT_OK;
+  return &status;
+}
+
+enum MQTTErrors *heartbeat_update(const char *topic, uint64_t now_s) {
+  if (status != MQTT_OK)
+    return &status;
+  if (now_s >= next_heartbeat) {
+    printf("SEND %ld %s\n", (long)ticks[tick], topic);
+    status = scenario("send-error") ? MQTT_ERROR_SOCKET_ERROR : MQTT_OK;
+    next_heartbeat = now_s + 5;
+  }
+  if (status == MQTT_OK)
+    heartbeat_sync();
+  if (status != MQTT_OK)
+    fprintf(stderr, "Error while handling heartbeats: simulated socket error.\n");
+  return &status;
 }
 
 void heartbeat_destroy(void) { puts("DESTROY"); }
@@ -47,7 +65,7 @@ int test_clock_gettime(clockid_t clock_id, struct timespec *value) {
     errno = EIO;
     return -1;
   }
-  value->tv_sec = 100 + ticks[tick];
+  value->tv_sec = 100000 + ticks[tick];
   value->tv_nsec = 0;
   return 0;
 }

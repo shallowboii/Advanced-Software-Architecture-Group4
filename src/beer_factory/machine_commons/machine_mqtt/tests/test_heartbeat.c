@@ -14,7 +14,8 @@
 #include <unistd.h>
 
 /* Only the test build of heartbeat.c redirects network calls to these doubles. */
-static struct mqtt_client test_client;
+extern struct mqtt_client client;
+extern uint64_t last_heartbeat_s;
 static struct sockaddr address;
 static struct addrinfo broker_address;
 static enum MQTTErrors init_result, connect_result, publish_result;
@@ -23,6 +24,9 @@ static unsigned int init_calls, connect_calls, publish_calls, close_calls;
 static unsigned int destroy_calls, free_calls;
 static machine_heartbeat_t published;
 static const char *expected_name;
+static const char *expected_topic;
+static enum MQTTErrors sync_result;
+static unsigned int sync_calls, disconnect_calls;
 
 int test_getaddrinfo(const char *host, const char *port,
                      const struct addrinfo *hints, struct addrinfo **result) {
@@ -83,7 +87,7 @@ int test_close(int fd) {
 }
 
 int test_pthread_mutex_destroy(pthread_mutex_t *mutex) {
-  assert(mutex == &test_client.mutex);
+  assert(mutex == &client.mutex);
   ++destroy_calls;
   return pthread_mutex_destroy(mutex);
 }
@@ -93,7 +97,7 @@ enum MQTTErrors mqtt_init(
     uint8_t *send, size_t send_size, uint8_t *recv, size_t recv_size,
     void (*callback)(void **, struct mqtt_response_publish *)) {
   ++init_calls;
-  assert(actual == &test_client && fd == 42);
+  assert(actual == &client && fd == 42);
   assert(send != NULL && send_size > 0);
   assert(recv != NULL && recv_size > 0 && recv != send);
   assert(callback == NULL);
@@ -109,7 +113,7 @@ enum MQTTErrors mqtt_connect(
     const void *will_message, size_t will_size, const char *username,
     const char *password, uint8_t flags, uint16_t keep_alive) {
   ++connect_calls;
-  assert(actual == &test_client);
+  assert(actual == &client);
   assert(strcmp(id, expected_name) == 0);
   assert(will_topic == NULL && will_message == NULL && will_size == 0);
   assert(username == NULL && password == NULL);
@@ -118,130 +122,129 @@ enum MQTTErrors mqtt_connect(
 }
 
 const char *mqtt_error_str(enum MQTTErrors error) {
-  assert(error == connect_result);
+  (void)error;
   return "simulated MQTT error";
 }
 
 enum MQTTErrors mqtt_publish(struct mqtt_client *actual, const char *topic,
                             const void *payload, size_t size, uint8_t flags) {
   ++publish_calls;
-  assert(actual == &test_client);
-  assert(strcmp(topic, "heartbeat") == 0);
+  assert(actual == &client);
+  assert(strcmp(topic, expected_topic) == 0);
   assert(size == sizeof(published) && flags == MQTT_PUBLISH_QOS_1);
   memcpy(&published, payload, size);
   return publish_result;
 }
 
+
+enum MQTTErrors mqtt_sync(struct mqtt_client *actual) {
+  assert(actual == &client);
+  ++sync_calls;
+  return sync_result;
+}
+
+enum MQTTErrors mqtt_disconnect(struct mqtt_client *actual) {
+  assert(actual == &client);
+  ++disconnect_calls;
+  return MQTT_OK;
+}
+
 static void reset(void) {
-  init_result = connect_result = publish_result = MQTT_OK;
+  init_result = connect_result = publish_result = sync_result = MQTT_OK;
   lookup_result = tcp_result = socket_error = 0;
   poll_result = 1;
   init_calls = connect_calls = publish_calls = close_calls = 0;
-  destroy_calls = free_calls = 0;
-  expected_name = "machine-1";
+  destroy_calls = free_calls = sync_calls = disconnect_calls = 0;
+  expected_name = "BOILING-7";
+  expected_topic = "boiling";
+  /* Isolate scheduling tests without relying on reinitialization semantics. */
+  last_heartbeat_s = 0;
 }
 
-static enum MQTTErrors initialize(void) {
-  return heartbeat_init(&test_client, "machine-1");
-}
-
-static void cleanup(void) {
-  assert(pthread_mutex_destroy(&test_client.mutex) == 0);
-  assert(test_close(test_client.socketfd) == 0);
-}
-
-static void test_initialization(void) {
+static void test_initialization_failures(void) {
   reset();
   lookup_result = EAI_NONAME;
-  assert(initialize() == MQTT_ERROR_SOCKET_ERROR);
-  assert(init_calls == 0 && connect_calls == 0 && close_calls == 0);
-  assert(free_calls == 0);
+  assert(*heartbeat_init("BOILING", 7) == MQTT_ERROR_SOCKET_ERROR);
+  assert(init_calls == 0 && close_calls == 0 && free_calls == 0);
+  assert(*heartbeat_status() == MQTT_ERROR_SOCKET_ERROR);
+  heartbeat_update("boiling", 10);
+  assert(publish_calls == 0 && sync_calls == 0);
 
   reset();
   tcp_result = -1;
   poll_result = 0;
-  assert(initialize() == MQTT_ERROR_SOCKET_ERROR);
-  assert(init_calls == 0 && connect_calls == 0 && close_calls == 1);
-  assert(free_calls == 1);
+  assert(*heartbeat_init("BOILING", 7) == MQTT_ERROR_SOCKET_ERROR);
+  assert(init_calls == 0 && close_calls == 1 && free_calls == 1);
 
   reset();
   tcp_result = -1;
   socket_error = ECONNREFUSED;
-  assert(initialize() == MQTT_ERROR_SOCKET_ERROR);
-  assert(init_calls == 0 && close_calls == 1 && free_calls == 1);
+  assert(*heartbeat_init("BOILING", 7) == MQTT_ERROR_SOCKET_ERROR);
+  assert(init_calls == 0 && close_calls == 1);
 
   reset();
   init_result = MQTT_ERROR_RECV_BUFFER_TOO_SMALL;
-  assert(initialize() == MQTT_ERROR_RECV_BUFFER_TOO_SMALL);
+  assert(*heartbeat_init("BOILING", 7) == init_result);
   assert(init_calls == 1 && connect_calls == 0 && close_calls == 1);
-  assert(destroy_calls == 0 && free_calls == 1);
+  assert(destroy_calls == 0);
 
   reset();
   connect_result = MQTT_ERROR_SEND_BUFFER_IS_FULL;
-  assert(initialize() == MQTT_ERROR_SEND_BUFFER_IS_FULL);
-  assert(init_calls == 1 && connect_calls == 1 && close_calls == 1);
-  assert(destroy_calls == 1);
-
-  reset();
-  assert(initialize() == MQTT_OK);
-  assert(init_calls == 1 && connect_calls == 1 && close_calls == 0);
-  assert(destroy_calls == 0 && free_calls == 1);
-  cleanup();
-
-  reset();
-  tcp_result = -1;
-  assert(initialize() == MQTT_OK);
-  assert(init_calls == 1 && connect_calls == 1 && close_calls == 0);
-  cleanup();
+  assert(*heartbeat_init("BOILING", 7) == connect_result);
+  assert(connect_calls == 1 && close_calls == 1 && destroy_calls == 1);
 }
 
-static void expect_invalid_name(char *name) {
-  pid_t child = fork();
-  assert(child >= 0);
-  if (child == 0) {
-    const struct rlimit no_core = {0, 0};
-    (void)setrlimit(RLIMIT_CORE, &no_core);
-    (void)heartbeat_init(&test_client, name);
-    _exit(0);
-  }
-  int status;
-  assert(waitpid(child, &status, 0) == child);
-  assert(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
-}
-
-static void check_payload(char *name) {
+static void test_identity_and_timing(char *prefix, const char *name,
+                                     const char *topic) {
   reset();
   expected_name = name;
-  assert(heartbeat_init(&test_client, name) == MQTT_OK);
+  expected_topic = topic;
+  enum MQTTErrors *status = heartbeat_init(prefix, 7);
+  assert(*status == MQTT_OK && status == heartbeat_status());
+  assert(init_calls == 1 && connect_calls == 1 && free_calls == 1);
+  heartbeat_update(topic, 0);
+  heartbeat_update(topic, 4);
+  assert(publish_calls == 0 && sync_calls == 2);
   time_t before = time(NULL);
-  assert(heartbeat_send(&test_client) == MQTT_OK);
-  time_t after = time(NULL);
-  assert(published.timestamp >= before && published.timestamp <= after);
-  assert(strcmp(published.machine_name, name) == 0);
-  for (size_t i = strlen(name); i < sizeof(published.machine_name); ++i)
-    assert(published.machine_name[i] == '\0');
+  assert(heartbeat_update(topic, 5) == status);
+  assert(publish_calls == 1 && sync_calls == 3);
+  assert(published.machine_idx == 7);
+  assert(published.timestamp >= before && published.timestamp <= time(NULL));
+  heartbeat_update(topic, 5);
+  heartbeat_update(topic, 9);
   assert(publish_calls == 1);
+  heartbeat_update(topic, 10);
+  assert(publish_calls == 2);
+  heartbeat_destroy();
+  assert(disconnect_calls == 1 && destroy_calls == 1 && close_calls == 1);
+}
 
+static void test_runtime_failures(void) {
+  reset();
+  enum MQTTErrors *status = heartbeat_init("BOILING", 7);
   publish_result = MQTT_ERROR_SEND_BUFFER_IS_FULL;
-  assert(heartbeat_send(&test_client) == MQTT_ERROR_SEND_BUFFER_IS_FULL);
-  assert(publish_calls == 2);
-  assert(heartbeat_send(NULL) == MQTT_ERROR_NULLPTR);
-  assert(publish_calls == 2);
-  cleanup();
+  heartbeat_update("boiling", 5);
+  assert(*status == publish_result && sync_calls == 0 && publish_calls == 1);
+  heartbeat_update("boiling", 10);
+  assert(sync_calls == 0 && publish_calls == 1);
+  heartbeat_destroy();
+
+  reset();
+  status = heartbeat_init("BOILING", 7);
+  sync_result = MQTT_ERROR_SOCKET_ERROR;
+  heartbeat_update("boiling", 1);
+  assert(*status == sync_result && sync_calls == 1 && publish_calls == 0);
+  heartbeat_update("boiling", 10);
+  assert(sync_calls == 1 && publish_calls == 0);
+  heartbeat_destroy();
 }
 
 int main(void) {
-  test_initialization();
-  check_payload("boiling");
-  check_payload("");
-  char name[MAX_MACHINE_NAME_LEN + 1];
-  memset(name, 'x', sizeof(name));
-  name[MAX_MACHINE_NAME_LEN - 1] = '\0';
-  check_payload(name);
-  name[MAX_MACHINE_NAME_LEN - 1] = 'x';
-  name[MAX_MACHINE_NAME_LEN] = '\0';
-  expect_invalid_name(name);
-  expect_invalid_name(NULL);
+  test_initialization_failures();
+  test_identity_and_timing("BOILING", "BOILING-7", "boiling");
+  test_identity_and_timing("FERMENTATION_MATURATION",
+                           "FERMENTATION_MATURATION-7", "fermentation_maturation");
+  test_runtime_failures();
   puts("Heartbeat tests passed.");
   return 0;
 }

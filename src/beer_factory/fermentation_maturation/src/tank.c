@@ -8,7 +8,7 @@ tank_result_t tank_shared_init(tank_shared_t *shared) {
 }
 
 tank_result_t tank_init(tank_t *tank, tank_shared_t *shared, int tank_idx) {
-  if (tank_idx >= TANK_MAX_TANKS || shared->tanks_status[tank_idx] ||
+  if (tank_idx < 0 || tank_idx >= TANK_MAX_TANKS || shared->tanks_status[tank_idx] ||
       shared->almost_done[tank_idx]) {
     return TANK_INVALID_ARGUMENT;
   }

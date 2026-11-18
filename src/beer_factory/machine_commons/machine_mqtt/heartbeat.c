@@ -74,7 +74,7 @@ static int connect_broker(const char *host, const char *port) {
   return fd;
 }
 
-enum MQTTErrors *heartbeat_init(int machine_idx) {
+enum MQTTErrors *heartbeat_init(char *machine_prefix, int machine_idx) {
   mqtt_machine_idx = machine_idx;
 
   int fd = connect_broker(MQTT_HOST, MQTT_PORT);
@@ -115,7 +115,8 @@ enum MQTTErrors *heartbeat_init(int machine_idx) {
    * broker's response, and maintain the connection.
    */
   char machine_name[50];
-  snprintf(machine_name, sizeof(machine_name), "BOILING-%i", machine_idx);
+  snprintf(machine_name, sizeof(machine_name), "%s-%i", machine_prefix,
+           machine_idx);
   mqtt_result = mqtt_connect(&client, machine_name, NULL, NULL, 0, NULL, NULL,
                              MQTT_CONNECT_CLEAN_SESSION, 60);
 
@@ -140,7 +141,7 @@ enum MQTTErrors *heartbeat_send(const char *topic) {
   return &mqtt_result;
 }
 
-void heartbeat_destroy() {
+void heartbeat_destroy(void) {
   if (mqtt_disconnect(&client) == MQTT_OK) {
     (void)mqtt_sync(&client);
   }
@@ -149,7 +150,7 @@ void heartbeat_destroy() {
   close(mqtt_fd);
 }
 
-enum MQTTErrors *heartbeat_sync() {
+enum MQTTErrors *heartbeat_sync(void) {
   mqtt_result = mqtt_sync(&client);
   return &mqtt_result;
 }
@@ -176,4 +177,4 @@ enum MQTTErrors *heartbeat_update(const char *topic, uint64_t now_s) {
   return &mqtt_result;
 }
 
-enum MQTTErrors *heartbeat_status() { return &mqtt_result; }
+enum MQTTErrors *heartbeat_status(void) { return &mqtt_result; }

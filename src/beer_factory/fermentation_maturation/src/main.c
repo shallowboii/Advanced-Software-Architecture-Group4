@@ -15,6 +15,10 @@ int main(int argc, char **argv) {
   }
 
   long machine_number = atoi(argv[1]);
+  if (machine_number < 0) {
+    printf("Machine number must be >= 0\n");
+    return EXIT_FAILURE;
+  }
 
   tank_shared_t shared;
   tank_t tank;
@@ -24,7 +28,8 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
 
-  enum MQTTErrors *mqtt_result = heartbeat_init(machine_number);
+  enum MQTTErrors *mqtt_result =
+      heartbeat_init("FERMENTATION_MATURATION", machine_number);
   if (*mqtt_result != MQTT_OK) {
     printf("Could not start MQTT!\n");
   }

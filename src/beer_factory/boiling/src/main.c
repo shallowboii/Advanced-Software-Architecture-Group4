@@ -20,7 +20,12 @@ int main(int argc, char **argv) {
   }
 
   long machine_number = atoi(argv[1]);
-  enum MQTTErrors *mqtt_result = heartbeat_init(machine_number);
+  if (machine_number < 0) {
+    printf("Machine number must be >= 0\n");
+    return EXIT_FAILURE;
+  }
+
+  enum MQTTErrors *mqtt_result = heartbeat_init("BOILING", machine_number);
   if (*mqtt_result != MQTT_OK) {
     printf("Could not start MQTT!\n");
   }
@@ -35,7 +40,7 @@ int main(int argc, char **argv) {
   boiling_batches_t batches = {.sweet_wort_batches = 1, .hot_wort_batches = 0};
   boiling_t boiling;
   boiling_init(&boiling, &batches);
-  (void)boiling_start(&boiling, 0);
+  boiling_start(&boiling, started.tv_sec);
   printf("Boiling started\n");
 
   int status = EXIT_SUCCESS;
