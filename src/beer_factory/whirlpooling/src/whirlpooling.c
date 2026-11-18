@@ -1,0 +1,74 @@
+#include "whirlpooling.h"
+
+#include <stddef.h>
+
+whirlpooling_result_t whirlpooling_init(whirlpooling_t *whirlpooling,
+                                        whirlpooling_batches_t *batches) {
+  if (whirlpooling == NULL || batches == NULL) {
+    return WHIRLPOOLING_INVALID_ARGUMENT;
+  }
+
+  *whirlpooling = (whirlpooling_t){.state = WHIRLPOOLING_WAIT,
+                                   .batches = batches,
+                                   .started_at_seconds = 0,
+                                   .last_time_seconds = 0};
+
+  return WHIRLPOOLING_OK;
+}
+
+whirlpooling_result_t whirlpooling_start(whirlpooling_t *whirlpooling,
+                                         uint64_t now_seconds) {
+  if (whirlpooling == NULL || whirlpooling->batches == NULL) {
+    return WHIRLPOOLING_INVALID_ARGUMENT;
+  }
+
+  if (now_seconds < whirlpooling->last_time_seconds) {
+    return WHIRLPOOLING_INVALID_TIME;
+  }
+
+  if (whirlpooling->state != WHIRLPOOLING_WAIT) {
+    return WHIRLPOOLING_BUSY;
+  }
+
+  /* Guard: has_hot_wort() */
+  if (whirlpooling->batches->hot_wort_batches < 1) {
+    return WHIRLPOOLING_NO_HOT_WORT;
+  }
+
+  /* Assignments: reset(), take_hot_wort() */
+  whirlpooling->started_at_seconds = now_seconds;
+  whirlpooling->last_time_seconds = now_seconds;
+  whirlpooling->batches->hot_wort_batches--;
+  whirlpooling->state = WHIRLPOOLING_WHIRLPOOL;
+
+  return WHIRLPOOLING_STARTED;
+}
+
+whirlpooling_result_t whirlpooling_update(whirlpooling_t *whirlpooling,
+                                          uint64_t now_seconds) {
+  if (whirlpooling == NULL || whirlpooling->batches == NULL) {
+    return WHIRLPOOLING_INVALID_ARGUMENT;
+  }
+
+  if (now_seconds < whirlpooling->last_time_seconds) {
+    return WHIRLPOOLING_INVALID_TIME;
+  }
+
+  whirlpooling->last_time_seconds = now_seconds;
+
+  if (whirlpooling->state != WHIRLPOOLING_WHIRLPOOL) {
+    return WHIRLPOOLING_NO_CHANGE;
+  }
+
+  /* Guard: a >= T_WHIRLPOOLING (subtraction cannot overflow here). */
+  if (now_seconds - whirlpooling->started_at_seconds <
+      WHIRLPOOLING_DURATION_SECONDS) {
+    return WHIRLPOOLING_NO_CHANGE;
+  }
+
+  /* Assignment: make_clarified_wort() */
+  whirlpooling->batches->clarified_wort_batches++;
+  whirlpooling->state = WHIRLPOOLING_WAIT;
+
+  return WHIRLPOOLING_DONE;
+}
