@@ -57,7 +57,6 @@ int main(int argc, char **argv) {
       printf("Boiling complete; waiting.");
     }
 
-    // Are we connected?
     heartbeat_update("boiling", now.tv_sec);
     sleep(1);
   }
