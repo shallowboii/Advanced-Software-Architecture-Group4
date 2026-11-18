@@ -1,0 +1,12 @@
+# Files Docker should NOT copy into any machine image.
+# Applies to every Dockerfile built from src/beer_factory.
+
+# Local build output (on Windows these are .exe files that won't run in Linux)
+**/build/
+
+# macOS junk
+**/.DS_Store
+
+# Compiled binaries that were committed by accident
+filtering/src/test_filtering
+scheduling/src/brewery_test
