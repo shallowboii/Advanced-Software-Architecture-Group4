@@ -1,0 +1,95 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "StatefulSet",
+  "metadata": {
+    "name": "postgres"
+  },
+  "spec": {
+    "replicas": 1,
+    "selector": {
+      "matchLabels": {
+        "app": "postgres"
+      }
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "postgres"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "postgres",
+            "image": "postgres:17.6-bookworm",
+            "ports": [
+              {
+                "containerPort": 5432
+              }
+            ],
+            "env": [
+              {
+                "name": "POSTGRES_DB",
+                "value": "beerfactory"
+              },
+              {
+                "name": "POSTGRES_USER",
+                "value": "beerfactory"
+              },
+              {
+                "name": "POSTGRES_PASSWORD",
+                "value": "development-only"
+              },
+              {
+                "name": "PGDATA",
+                "value": "/var/lib/postgresql/data/pgdata"
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              },
+              "limits": {
+                "memory": "1Gi"
+              }
+            },
+            "readinessProbe": {
+              "tcpSocket": {
+                "port": 5432
+              },
+              "initialDelaySeconds": 5,
+              "periodSeconds": 5
+            },
+            "volumeMounts": [
+              {
+                "name": "data",
+                "mountPath": "/var/lib/postgresql/data"
+              }
+            ]
+          }
+        ],
+        "volumes": [],
+        "terminationGracePeriodSeconds": 30
+      }
+    },
+    "serviceName": "postgres",
+    "volumeClaimTemplates": [
+      {
+        "metadata": {
+          "name": "data"
+        },
+        "spec": {
+          "accessModes": [
+            "ReadWriteOnce"
+          ],
+          "resources": {
+            "requests": {
+              "storage": "2Gi"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

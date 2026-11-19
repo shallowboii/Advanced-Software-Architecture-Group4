@@ -1,0 +1,483 @@
+BEER FACTORY — PRZEWODNIK PO KODZIE I PRZYGOTOWANIE DO EGZAMINU
+
+Ten dokument opisuje podział odpowiedzialności w kodzie, a nie deklaruje, że
+wszystkie testy integracyjne już przeszły. Wynik testu należy łączyć z konkretnym
+commitem, środowiskiem i zapisanym raportem. Punktem odniesienia dla komunikatów
+jest src/contracts/PROTOCOL.md; dla wdrożenia — wygenerowane manifesty w src/deploy.
+
+1. CO WŁAŚCIWIE MODELUJEMY
+
+Fabryka ma sześć etapów: mash, lauter, kettle, whirlpool, unitank, filter.
+Partia ma stałą objętość 50 hL. Maszyna obsługuje najwyżej jedną partię, a unitank
+wykonuje fermentację i maturację w tym samym zbiorniku. Nie ma czyszczenia ani
+buforów materiałowych pomiędzy etapami. Materiał czeka w maszynie źródłowej;
+transfer zajmuje oba końce połączenia. Kolejka zleceń jest kolejką zapotrzebowania,
+nie dodatkowym magazynem piwa. Po filtracji i zwolnieniu zawartości piwo opuszcza
+modelowany system; nie modelujemy rozlewu ani dalszej logistyki.
+
+Najważniejsza granica architektoniczna:
+
+  SCHEDULER zna: zlecenie, partię, wersję receptury, etap, fazę, termin jakościowy,
+  przydział materiału do maszyny i biznesowy identyfikator transferu.
+
+  KONTROLER zna: własną tożsamość, stan urządzenia, zajętość, czas operacji,
+  temperaturę zadaną, postęp, zatrzymanie i techniczne identyfikatory komunikacji.
+
+Kontroler nie dostaje batch_id, recipe_version_id, order_id, execution_id ani
+transfer_id. Nie przechowuje receptury i sam nie wybiera kolejnej fazy. Zdanie
+„unitank fermentuje partię X według receptury Y” jest interpretacją schedulera.
+Dla kontrolera oznacza to np. „wykonuj operację przez 168 godzin symulowanych
+przy temperaturze zadanej 20°C”.
+
+command_id, current_command_id, interrupted_command_id i controller_boot_id są
+techniczne. Pozwalają rozpoznać ponowienie komendy, działającą operację oraz
+uruchomienie procesu. To nie są ukryte identyfikatory partii. Powiązanie konkretnej
+komendy z partią istnieje po stronie backendu.
+
+2. KTO ZA CO ODPOWIADA
+
+C / src/machine:
+  Symulacja pojedynczego urządzenia i jego lokalnego panelu operatora. Obsługuje
+  komendy, zegar operacji, STOP, permit, obserwacje i pomiary. Stan jest w RAM.
+
+Java / src/backend:
+  Centralny model produkcji, scheduler, API, kontrola receptur, przypisywanie
+  obserwacji do partii, koordynowanie transferów i rozliczanie wyników.
+
+Python / src/inventory:
+  Mock dostępności surowców. Rezerwuje składniki przed dopuszczeniem partii.
+  To osobna usługa HTTP przechowująca stan wyłącznie w pamięci procesu.
+
+React + TypeScript / src/frontend:
+  Widok operatora. Wyświetla stan otrzymany z backendu i wysyła żądania działań.
+  Nie steruje bezpośrednio brokerem i nie podejmuje decyzji produkcyjnych.
+
+RabbitMQ z MQTT:
+  Kanał sterowania, heartbeatów, istotnych obserwacji i ich potwierdzeń.
+
+Kafka:
+  Strumień telemetrii oraz publikacja centralnych zdarzeń produkcyjnych.
+  Brak telemetrii nie jest potwierdzeniem zatrzymania lub wykonania komendy.
+
+Redis:
+  Bieżący rejestr widoczności maszyn z wygasającymi wpisami.
+
+PostgreSQL:
+  Trwały model biznesowy, dziennik komend, historia, decyzje koordynatora,
+  deduplikacja i informacje potrzebne do rozpoznania nieuzgodnionego stanu.
+
+3. JAK CZYTAĆ KOD C
+
+src/machine/machine.h:
+  BFState opisuje fizyczny stan sprzętu. BFCommand opisuje pojedynczą komendę
+  wykonawczą. BFMachine zawiera stan i pamięciowe kolejki zdarzeń oraz wyniki
+  komend. W strukturach nie należy szukać partii ani receptury.
+
+src/machine/machine.c:
+  bf_init() tworzy EMPTY, nowy boot ID i brak ważnego permitu.
+  bf_command() sprawdza komendę, ponowienia i warunki wykonania, a następnie
+  deleguje do handlera operacji.
+  bf_tick() przesuwa zegar fizycznej operacji tylko w dozwolonym przedziale czasu.
+  bf_permitted() łączy ważność permitu z niezależnymi zatrzaskami STOP.
+  bf_snapshot() serializuje obserwację urządzenia.
+  bf_outbox()/bf_outbox_new() wysyłają zdarzenia oczekujące w RAM;
+  bf_ack() usuwa zdarzenie po potwierdzeniu odbioru.
+  bf_close() zwalnia pamięć. Nie zapisuje checkpointu na dysku.
+
+  Czytanie handlerów handle_processing(), handle_prepare(), handle_execute(),
+  handle_commit(), handle_abort(), handle_flush() i handle_release() pokazuje
+  dozwolone przejścia fizycznego automatu. READY oznacza zakończenie bieżącej
+  operacji z zachowaniem zawartości; nie oznacza samodzielnego wyboru dalszej pracy.
+
+src/machine/wire.c:
+  bf_parse_command() zamienia JSON na BFCommand i sprawdza dozwolone pola.
+  To druga kontrola granicy architektury: nawet gdy ktoś wyśle opis receptury,
+  kontroler nie powinien go przyjąć jako części własnego modelu.
+
+src/machine/main.c:
+  main() uruchamia transport i pętlę; service_cycle() łączy obsługę lokalną,
+  wejścia sieciowe, bf_tick() i publikowanie danych. Callback MQTT przekazuje
+  wiadomości do kolejki, zamiast dowolnie modyfikować automat z wątku transportu.
+  telemetry() tworzy symulowane pomiary; nie decyduje o własności materiału.
+  To działająca symulacja sprzętu i komunikacji, nie sterownik podłączony do
+  rzeczywistych czujników browaru. Wzory pomiarów nie dowodzą poprawności procesu
+  chemicznego; są kontrolowanym źródłem danych dla projektu architektury.
+
+src/machine/machinectl.c:
+  Program lokalnego operatora, komunikujący się przez Unix socket. Można wykonać
+  snapshot, stop, resume oraz flush. Lokalna obsługa nie wymaga działającego MQTT.
+  To symulacja interfejsu fizycznego operatora, nie certyfikowany układ bezpieczeństwa.
+
+4. JAK CZYTAĆ BACKEND
+
+Poniższe pliki znajdują się w katalogu:
+  src/backend/src/main/java/dk/sdu/beerfactory/
+
+Application.java i Bootstrap.java:
+  Start aplikacji oraz inicjalizacja schematu, konfiguracji i receptur.
+
+ApiController.java i FactoryService.java:
+  HTTP oraz fasada wywołań przypadków użycia. FactoryService.mutate() wiąże
+  Idempotency-Key z treścią żądania i odpowiedzią w PostgreSQL. Ten sam klucz
+  z inną treścią jest konfliktem, a nie nowym zleceniem.
+
+OrderService.java i Recipes.java:
+  Tworzenie zleceń, wersjonowanie i walidacja receptur. Edycja publikuje nową
+  wersję; dopuszczona partia zachowuje wcześniej wybraną definicję.
+
+Coordinator.java:
+  Pętle harmonogramowania: schedule(), permits(), commands(), events(),
+  reconcile(). Nie należy utożsamiać jednej iteracji pętli z zakończeniem
+  fizycznej operacji: jej wynik przychodzi później jako obserwacja.
+
+AdmissionScheduler.java:
+  beginAdmission() wybiera możliwe dopuszczenie do produkcji.
+  inventoryReserved() przechodzi od rezerwacji surowców do wysłania pracy.
+  cancelledReservations()/reservationReleased() obsługują anulowanie przed
+  rozpoczęciem produkcji. reconcile() uzgadnia stan centralny i dostępne obserwacje.
+
+StageCommands.java:
+  stagePayload() buduje PRYWATNY kontekst komendy z wiedzą o partii i recepturze.
+  Zobaczenie batch_id w tym obiekcie nie oznacza, że pole trafia na maszynę.
+
+ControllerProtocol.java — szczególnie ważny plik do obrony architektury:
+  actuatorCommand() tworzy wiadomość do urządzenia według jawnej listy pól.
+  Z kontekstu receptury wybiera duration_h i target_temp_c dla jednej operacji.
+  enrichEvent()/enrichTelemetry() wykonują ruch w drugą stronę: techniczną
+  obserwację łączą z centralnym zapisem rzeczywistej komendy. Opóźnionego pomiaru
+  nie wolno przypisać do partii, która akurat TERAZ stoi w maszynie.
+
+ProductionJournal.java:
+  command() zapisuje komendę i jej centralny kontekst przed publikacją.
+  record()/recordWithId() zapisują zdarzenie i wpis outbox przeznaczony do Kafki.
+
+MachineEvents.java i OperationScheduler.java:
+  machineEvent() przyjmuje i deduplikuje obserwacje.
+  OperationScheduler.completed() wybiera następną fazę, oczekiwanie na transfer
+  albo wyjście z systemu. checkTimeouts() sprawdza terminy jakościowe i przerwy
+  CENTRALNIE. Kontroler nie zna polityki zepsucia piwa ani hold_h receptury.
+
+TransferCoordinator.java:
+  scheduleTransfers() wybiera połączenie dwóch maszyn; transferEvent() reaguje
+  na przygotowanie, zakończenie ruchu oraz potwierdzenia decyzji.
+
+BatchLifecycle.java:
+  flushBatch(), markLoss(), abortOrFlush(), finishBatch() rozdzielają decyzję
+  o stracie od fizycznego opróżnienia i chronią przed podwójnym rozliczeniem.
+
+MachineRegistry.java:
+  heartbeat()/acceptSnapshot() rozpoznają boot i wersję obserwacji.
+  onlineMachines()/freeMachine() korzystają z bieżącego Redis.
+  machines() tworzy widok dla panelu, uzupełniając sprzęt o CENTRALNE powiązania.
+  failRunAfterStateLoss() zatrzymuje linię przy utracie aktywnego stanu urządzenia.
+
+Leadership.java i Store.java:
+  Leadership.maintain() wybiera jednego aktywnego koordynatora przez blokadę
+  doradczą PostgreSQL i zwiększa epoch. Store zapewnia dostęp do bazy oraz
+  wspólną granicę transakcji i blokowania decyzji schedulera.
+
+MqttGateway.java, KafkaGateway.java, HistoryService.java, LiveSocket.java:
+  Adaptery transportu, zapis/odczyt historii i dostarczanie aktualizacji panelowi.
+  Adapter transportowy nie powinien zastępować reguł produkcji.
+
+ExperimentService.java:
+  Granice przebiegu eksperymentu, liczniki wyników i informacja, że przebieg
+  utracił wiarygodność po restarcie aktywnego urządzenia.
+
+5. PRZEŚLEDŹ JEDNĄ PARTIĘ OD ZLECENIA DO WYJŚCIA
+
+A. Operator tworzy zlecenie w OrderForm. useCommands wysyła POST /api/orders
+   z Idempotency-Key i X-Operator. Backend zapisuje zapotrzebowanie w PostgreSQL.
+   Sam zapis zlecenia nie oznacza, że materiał znajduje się już w maszynie.
+
+B. Scheduler sprawdza politykę dopuszczenia, STOP, widoczność i dostępność mash
+   oraz limit pracy w toku. PUSH dopuszcza przy dostępnych zasobach; CONWIP
+   dodatkowo ogranicza liczbę aktywnych partii. Brak surowców wstrzymuje nowe
+   dopuszczenie, nie zwraca automatycznie materiału z już pracujących maszyn.
+
+C. Backend rezerwuje składniki przez HTTP w Pythonowym Inventory.reserve().
+   batch_id jest tutaj prawidłowy: inventory współpracuje z warstwą biznesową,
+   nie jest fizycznym kontrolerem urządzenia. Powtórzenie tego samego żądania
+   nie odejmuje składników drugi raz w czasie życia tego procesu inventory.
+
+D. Backend zapisuje przydział i komendę. ControllerProtocol.actuatorCommand()
+   pozostawia wyłącznie tożsamość techniczną oraz ustawienia wykonawcze.
+   Pierwszy START przy wejściu do linii rozpoczyna pracę pustego mash. Kontroler
+   nie dostaje nazwy piwa, liczby partii w zamówieniu ani listy następnych etapów.
+
+E. bf_command() przyjmuje operację; bf_tick() nalicza postęp, gdy wolno pracować.
+   Po zakończeniu kontroler emituje PROCESS_COMPLETED i pozostaje zajęty w READY.
+   Komunikat przechodzi przez MQTT do backendu. ACK brokera nie jest równoznaczny
+   z wykonaniem operacji. O wyniku świadczy właściwa obserwacja urządzenia.
+
+F. ControllerProtocol wzbogaca obserwację o jej centralny kontekst.
+   MachineEvents i OperationScheduler przesuwają model produkcji. Dopiero
+   scheduler decyduje, czy potrzebna jest następna operacja w tej samej maszynie,
+   transfer do następnego etapu, czy zwolnienie gotowego produktu.
+
+G. Jeśli potrzebny jest transfer, scheduler rezerwuje oba urządzenia.
+   PREPARE_TRANSFER zawiera fizyczną rolę source/target, bez transfer_id.
+   EXECUTE_TRANSFER uruchamia ruch o zadanym czasie. Oba końce potwierdzają
+   TRANSFER_READY. Backend zapisuje decyzję COMMITTED w PostgreSQL, zanim wyśle
+   COMMIT_TRANSFER. Potwierdzenie źródła poprzedza zatwierdzenie odbiorcy.
+   Dopiero po uzgodnieniu transferu scheduler zleca operację na odbiorcy.
+   Stan PREPARING/COMMITTED w bazie nie jest dodatkowym zbiornikiem materiału.
+
+H. W unitanku odbywają się dwie oddzielnie zlecane operacje. Po transferze
+   scheduler wysyła PROCESS z parametrami fermentacji. Po PROCESS_COMPLETED
+   wysyła następny PROCESS z parametrami maturacji. Urządzenie jest cały czas
+   zajęte. Nie ma transferu pomiędzy fermentacją a maturacją i kontroler nie
+   interpretuje nazw tych faz.
+
+I. Po ostatniej operacji filtra scheduler wysyła RELEASE. Kontroler opróżnia
+   urządzenie i emituje RELEASED. Backend przypisuje to do właściwej partii,
+   rozlicza COMPLETED oraz 50 hL wyjścia. Automatyczne ukończenie timera filtra
+   samo w sobie nie wystarcza do rozliczenia wyjścia.
+
+6. FLUSH: FIZYCZNA CZYNNOŚĆ I OSOBNE ROZLICZENIE BIZNESOWE
+
+Fizyczny operator wykonuje machinectl flush. Nie podaje ID partii ani receptury:
+usuwa bieżącą zawartość urządzenia. Komenda nadal ma techniczny command_id;
+kontroler potrafi wskazać przerwaną komendę przez interrupted_command_id.
+Backend rozwiązuje te techniczne odwołania do centralnego zapisu produkcji.
+
+Przycisk w panelu webowym jest inną drogą wejścia. Panel może wskazać batch_id
+w żądaniu do backendu, żeby nie usunąć przypadkiem nowej partii po opóźnionym
+kliknięciu. Backend sprawdza przypisanie i wysyła do urządzenia fizyczny FLUSH
+bez identyfikatorów biznesowych. Podczas nierozstrzygniętego transferu musi
+najpierw uzgodnić jego przerwanie lub już podjętą decyzję.
+
+markLoss() zapisuje jedną stratę. FLUSHED potwierdza usunięcie materiału;
+nie należy naliczać kolejnych 50 hL straty tylko dlatego, że przyszło kolejne
+potwierdzenie. Opróżnienie nie zwraca składników do inventory.
+
+Przekroczenie hold_h albo max_pause_h ocenia scheduler. Może oznaczyć partię
+jako straconą, ale fizyczny ruch i flush nie mają postępować podczas STOP.
+Nie należy twierdzić, że maszyna sama przechowuje całą politykę jakości piwa.
+
+7. STOP NIE JEST TYM SAMYM CO BRAK PERMITU
+
+local_stop i global_stop to niezależne zatrzaski. RESUME scope=global nie czyści
+local_stop. STOP zachowuje zawartość oraz bieżącą operację; nie jest synonimem
+flush ani anulowania zlecenia.
+
+PERMIT to krótkotrwałe zezwolenie na postęp. W kodzie kontrolera jest sprawdzane
+względem zegara monotonicznego. Brak odnowienia, np. przy awarii backendu lub
+MQTT, hamuje operację. Nowy permit nie kasuje jawnego STOP. Odwrotnie: samo
+RESUME nie zastępuje ważnego permitu.
+
+Epoch zabezpiecza przed starym koordynatorem, boot ID przed komendą przeznaczoną
+dla poprzedniego procesu, a expected_state_version przed zastosowaniem komendy
+do nieaktualnego stanu sprzętu. To różne warunki, nie trzy nazwy tego samego ID.
+
+Zegar symulacji może dalej iść, gdy postęp aktuatora jest zatrzymany. Dzięki temu
+backend może zauważyć przekroczenie limitu przerwy. Przy TIME_SCALE=2 jedna
+symulowana godzina odpowiada dwóm sekundom rzeczywistym: opóźnienia transportu
+są więc istotne dla interpretacji eksperymentów.
+
+8. POSTGRESQL, REDIS I GRANICE TRWAŁOŚCI
+
+PostgreSQL odpowiada na pytanie: „co wiemy o produkcji i jakie decyzje zapisano?”.
+Redis odpowiada na pytanie: „czy mamy teraz świeżą obserwację tej maszyny?”.
+
+MachineRegistry odświeża wpisy Redis z TTL. Po wygaśnięciu maszyna może pozostać
+widoczna w panelu jako offline, z ostatnim historycznym snapshotem z PostgreSQL.
+Taki zapis nie jest dowodem aktualnej dostępności. Kod nie powinien traktować
+historycznego last_seen jako awaryjnego zamiennika żywego wpisu Redis. Utrata
+rejestru ogranicza odnowienie permitów i dopuszczanie pracy.
+
+Dziennik komend PostgreSQL umożliwia ponowienie publikacji po awarii backendu.
+Outbox backendu łączy zapis zdarzenia biznesowego z późniejszą publikacją.
+Wiadomości nadal mogą być dostarczone ponownie: QoS 1 i idempotencja producenta
+Kafka nie oznaczają automatycznie „exactly once” dla całej fabryki.
+
+Kontroler deduplikuje komendy i przechowuje niepotwierdzone zdarzenia w RAM.
+Backend deduplikuje zdarzenia w swoim trwałym modelu. Te gwarancje mają inne
+zakresy: restart kontrolera usuwa jego kolejki i wyniki komend.
+
+Nie ma SQLite przy maszynie. To świadoma granica tego projektu: fizyczny proces
+jest uproszczonym urządzeniem z pamięcią ulotną, a wiedza o produkcji pozostaje
+centralna. Dodanie lokalnej bazy zmieniłoby model restartu i odpowiedzialności;
+nie jest automatycznie wymagane przez Kubernetes ani przez użycie MQTT.
+
+Pythonowy inventory również działa w RAM. threading.Lock serializuje sprawdzenie
+stanu, zmianę ilości i zapis ID. Decimal ogranicza błędy odejmowania ułamków.
+Rezerwacja, ponowienie dostawy i tombstone anulowania działają tylko w obrębie
+tego samego procesu. Tombstone chroni przed reserve, który dociera po release.
+Po restarcie INITIAL_BATCHES na nowo zasila mock i cała historia ID znika.
+Sam restart inventory nie uzgadnia istniejących partii w PostgreSQL.
+
+9. CO OZNACZA RESTART MASZYNY
+
+Nowy proces zaczyna jako EMPTY, occupied=false, z nowym controller_boot_id.
+Nie odtwarza postępu, kolejki zdarzeń ani zatrzasków STOP z lokalnego dysku.
+Backend może później ponownie wysłać STOP; nie jest to odtworzenie RAM przez C.
+
+Jeżeli centralny model wskazuje aktywny materiał lub nierozstrzygniętą operację,
+nie wolno wywnioskować „piwo zniknęło, policzmy automatycznie stratę” ani „wgrajmy
+stary postęp i jedźmy dalej”. Nowy EMPTY opisuje pusty model urządzenia po
+restarcie, a nie wiarygodny pomiar losu wcześniejszego materiału.
+
+MachineRegistry rozpoznaje utratę aktywnego stanu. Backend zachowuje biznesowe
+powiązania, oznacza partię UNRESOLVED, zatrzymuje linię i ustawia recovery_required
+oraz restart_blocked. Próba /line/resume daje 409. Przebieg eksperymentu jest
+nieważny i wymaga czystej fabryki. Nie powstaje fikcyjna produkcja ani automatyczne
+rozliczenie 50 hL straty. To jawne ograniczenie modelu, nie obietnica pełnego
+odtwarzania fizycznego browaru po awarii.
+
+Restart backendu przy nadal żyjącym kontrolerze jest innym przypadkiem: baza
+zachowuje decyzje, a kontroler nadal ma swój stan. Może wystąpić pauza przez
+wygaśnięcie permitu. Nie należy obiecywać bezprzerwowego rolloutu bez pomiaru.
+
+10. DLACZEGO OSOBNY POD DLA KAŻDEJ MASZYNY
+
+Jedna instancja procesu C reprezentuje jedno urządzenie. Oddzielny Pod daje
+oddzielny cykl życia, tożsamość, obserwowalność i możliwość zasymulowania awarii
+jednego kontrolera. Jednocześnie dodanie unitanków zmienia liczbę równoległych
+zasobów produkcyjnych, a nie tylko liczbę wątków wewnątrz wspólnego procesu.
+
+StatefulSet może zapewniać stabilne nazwy instancji, np. unitank-0, unitank-1.
+Nie oznacza to automatycznie trwałego RAM ani konieczności PVC dla kontrolera.
+Stabilna nazwa urządzenia i nowy boot ID procesu mają różne znaczenie.
+
+Dla N=20 unitanków jest 5 pozostałych maszyn + 20 unitanków, czyli 25 Podów
+maszynowych. Dla N=40 jest ich 45. Do tego dochodzą Pody usług infrastruktury
+oraz aplikacji. Profil smoke ma po jednej maszynie każdego typu, czyli 6.
+Kontener jest procesem uruchamianym przez runtime; Pod jest jednostką wdrażania
+Kubernetes. W tym modelu jeden Pod maszynowy zawiera jeden główny kontroler.
+
+src/tools/generate_deployment.py oraz src/deploy/compose i src/deploy/k8s pokazują
+odwzorowanie konfiguracji na wdrożenie. Zwiększanie liczby unitanków zwiększa
+pojemność tego etapu, ale nie gwarantuje proporcjonalnego wzrostu wyjścia:
+pozostałe etapy, limity WIP i postoje nadal mogą być wąskim gardłem.
+
+11. PYTHON I FRONTEND — GDZIE WEJŚĆ W KOD
+
+src/inventory/server.py:
+  Inventory.reserve(), release(), restock(), stock() zawierają reguły mocka.
+  Reservation i Delivery opisują pamięć ponowień. Handler oddziela parsowanie
+  HTTP/JSON od reguł zmiany stanu. main() za każdym razem tworzy świeży Inventory.
+
+src/frontend/src/App.tsx:
+  Wybór ekranu, maszyny, partii i potwierdzenia działań.
+
+src/frontend/src/useCommands.ts:
+  perform() nadaje nowy klucz żądaniu. execute() zachowuje pierwotne żądanie,
+  gdy wynik jest nieznany, i umożliwia jego bezpieczne ponowienie. Sukces HTTP
+  powoduje odświeżenie stanu, nie narysowanie zmyślonego zakończenia operacji.
+
+src/frontend/src/useFactory.ts:
+  Pełne snapshoty REST, bieżący bufor WebSocket, ponowne łączenie i błędy zasobów.
+  Ostatnia udana wartość może pozostać widoczna jako nieaktualna. Stare dane nie
+  powinny umożliwiać zwykłych działań; żądanie globalnego STOP pozostaje dostępne.
+
+src/frontend/src/Operations.tsx i src/frontend/src/MachineDialog.tsx:
+  Linia, siatka tanków i szczegóły jednego urządzenia. Widoczne batch_id lub nazwa
+  fazy pochodzą z wzbogaconego REST backendu, nie z pamięci kontrolera C.
+
+src/frontend/src/forms.tsx oraz src/frontend/src/views/:
+  Zlecenia, wersje receptur, składniki, eksperymenty i historia. HistoryView
+  pobiera najnowsze próbki, a domain.orderedSamples() usuwa duplikaty i układa je
+  chronologicznie do wykresu. Nie wolno pomylić odświeżenia wykresu z ACK sterowania.
+
+12. KTÓRY TEST ODPOWIADA NA KTÓRE PYTANIE
+
+Poniższa lista opisuje cel sprawdzeń. Samo istnienie testu lub kompilacja kodu
+nie jest dowodem poprawnego działania całego rozproszonego systemu.
+
+  src/machine/tests/test_core.c; make -C src/machine check
+    Sprawdza automat fizyczny bez prawdziwych brokerów: operacje, zatrzaski STOP,
+    permit, ponowienia, transfer, flush i granicę życia RAM. Nie zastępuje testu
+    prawdziwego MQTT, Kafki ani kontenerów. make sanitize dodaje kontrolę wybranych
+    błędów pamięci i niezdefiniowanego zachowania tam, gdzie jest obsługiwany.
+
+  src/backend/src/test/java/dk/sdu/beerfactory/
+    DomainTest/DomainCheck i RecipesTest/RecipesCheck sprawdzają reguły oraz
+    walidację. FactoryServiceTest bada koordynację i scenariusze przejść przy
+    wymaganych zależnościach testowych. Trzeba odróżnić uruchomione testy od
+    pominiętych z powodu braku PostgreSQL lub innej usługi.
+
+  src/inventory/test_inventory.py
+    Sprawdza współbieżne rezerwacje, retry, anulowanie, walidację i reset stanu.
+    Klasa HTTPTests otwiera prawdziwy lokalny port; testy domenowe nie robią tego.
+
+  src/frontend/tests/domain.test.ts; npm test oraz npm run build
+    Sprawdzenia czystych reguł prezentacji i walidacji oraz kompilacja TypeScript
+    i bundlowanie. Nie dowodzą kliknięcia całego przepływu w przeglądarce.
+
+  src/tools/smoke.py
+    Krótki test uruchomionego systemu: sześć typów maszyn, idempotentne zlecenie,
+    STOP/resume, przejście partii do wyjścia, telemetria i jedno zakończenie.
+
+  src/tools/failure_check.py
+    W izolowanej fabryce sprawdza kolejno awarie backendu, MQTT i Kafki, lokalny
+    STOP/resume i jedno usunięcie partii bez restartu jej kontrolera. Następnie
+    uruchamia osobną partię i na samym końcu restartuje aktywny kontroler.
+    Oczekiwanym stanem końcowym jest STOP + recovery_required + UNRESOLVED,
+    a nie powrót do produkcji. Raport zachowuje dowody; nie usuwa ich flushem.
+    Skrypt ingeruje w kontenery, więc nie należy odpalać go na cennym przebiegu.
+
+  src/tools/rollout_check.py
+    Obserwuje rollout backendu Kubernetes i rejestruje przerwy, błędy API oraz
+    znikanie maszyn. Sukces rollout status nie dowodzi braku pauzy produkcji;
+    do tego służą osobno zbierane próbki.
+
+  src/tools/soak.py
+    Dłuższa obserwacja uruchomionej fabryki. Krótki smoke nie zastępuje dowodu
+    stabilności przez wiele godzin.
+
+  src/tools/test_deployment.py
+    Sprawdza właściwości wygenerowanej konfiguracji. Poprawny JSON lub manifest
+    nie jest dowodem poprawnego działania sieci i usług w klastrze.
+
+  src/experiment/run.py, analyse.py, compare.py
+    Uruchomienie kontrolowanego obciążenia i analiza rezultatów. Porównuj PUSH
+    i CONWIP przy zgodnym scenariuszu, liczbie tanków, seedzie i warunkach pomiaru.
+    Obok strat pokazuj produkcję ukończoną i pracę pozostającą w systemie.
+    Szczegóły przebiegów: src/experiment/INSTRUKCJA_EKSPERYMENTU.txt.
+
+13. JAK ODPOWIEDZIEĆ NA EGZAMINIE — KRÓTKIE PRZYKŁADY
+
+Pytanie: Czy każda maszyna jest mikroserwisem znającym partię?
+Odpowiedź: Każda ma osobny proces i Pod, ale model kontrolera jest sprzętowy.
+Scheduler przechowuje partię i recepturę, a kontroler dostaje pojedyncze ustawienia
+aktuatora. W kodzie granicę widać w ControllerProtocol.actuatorCommand() i BFState.
+
+Pytanie: Skąd maszyna wie, że po fermentacji jest maturacja?
+Odpowiedź: Nie wie. Po zakończeniu pierwszej operacji zatrzymuje się w READY.
+OperationScheduler interpretuje wynik w kontekście receptury i wysyła drugi
+PROCESS do tego samego, nadal zajętego unitanku.
+
+Pytanie: Dlaczego nie użyć PostgreSQL zamiast Redis do dostępności maszyn?
+Odpowiedź: PostgreSQL zachowuje historię także po utracie kontaktu. Rejestr Redis
+ma TTL i odpowiada na pytanie o świeżość obserwacji. Historyczny zapis jest
+przydatny do audytu, ale nie powinien odnowić permitu nieobecnej maszyny.
+
+Pytanie: Czy Kafka steruje produkcją?
+Odpowiedź: Nie. Sterowanie i istotne obserwacje idą przez MQTT, a Kafka przenosi
+telemetrię oraz centralne zdarzenia do historii i analizy. Utrata Kafki nie ma
+samodzielnie wyłączyć aktuatora; test awarii osobno sprawdza ten przypadek.
+
+Pytanie: Czy QoS 1 daje wykonanie dokładnie raz?
+Odpowiedź: Nie. Dopuszcza ponowne dostarczenie. Potrzebne są identyfikatory,
+deduplikacja i sprawdzanie stanu. Deduplikacja kontrolera w RAM nie przeżywa
+restartu; nowy boot oraz centralna blokada chronią przed bezmyślnym odtworzeniem.
+
+Pytanie: Jak flush bez ID partii może prawidłowo policzyć stratę?
+Odpowiedź: Kontroler usuwa fizyczną zawartość. Obserwacja wskazuje techniczne
+komendy, które backend zna w swoim dzienniku. Backend przypisuje ją do partii
+i raz rozlicza stratę. Identyfikator biznesowy nie musi trafiać do urządzenia.
+
+Pytanie: Dlaczego po restarcie nie wznawiacie od zapisanego procentu?
+Odpowiedź: Zapis biznesowy nie dowodzi faktycznego stanu materiału, a kontroler
+utracił RAM. Zachowujemy UNRESOLVED i zatrzymujemy linię. W tym projekcie nowy
+wiarygodny eksperyment wymaga czystej fabryki, nie wymyślonego odzyskania fizyki.
+
+Pytanie: Czy osobny StatefulSet oznacza bazę SQLite w maszynie?
+Odpowiedź: Nie. StatefulSet może zapewnić stabilne nazwy Podów. W naszym modelu
+kontroler ma pamięć ulotną i nie używa SQLite; trwałość produkcji jest centralna.
+
+Pytanie: Co udowadnia działający dashboard?
+Odpowiedź: Że panel potrafi pokazać dane i wysłać żądania. Poprawność sterowania,
+rozliczenia i zachowania podczas awarii wymaga testów domenowych oraz rzeczywistych
+testów integracyjnych. Ich wyniki podaję oddzielnie, razem z zakresem i raportem.

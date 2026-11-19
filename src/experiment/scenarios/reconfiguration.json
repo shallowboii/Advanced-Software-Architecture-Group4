@@ -1,0 +1,14 @@
+{
+  "name": "recipe-change-urgent-order-stop-flush",
+  "warmup_h": 1008,
+  "measurement_h": 2160,
+  "order_interval_h": 12,
+  "actions": [
+    {"at_h": 1200, "kind": "publish_recipe", "recipe_id": "amber", "name": "Amber", "maturation_multiplier": 1.25},
+    {"at_h": 1201, "kind": "order", "recipe_id": "amber", "quantity": 3, "priority": 100},
+    {"at_h": 1300, "kind": "revise_recipe", "recipe_id": "ale", "maturation_multiplier": 0.9},
+    {"at_h": 1400, "kind": "flush_active", "stage": 4},
+    {"at_h": 1500, "kind": "stop"},
+    {"at_h": 1500.5, "kind": "resume"}
+  ]
+}

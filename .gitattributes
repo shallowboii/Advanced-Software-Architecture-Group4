@@ -1,0 +1,15 @@
+# Output of src/tools/generate_deployment.py
+compose.yaml linguist-generated
+src/deploy/compose/** linguist-generated
+src/deploy/k8s/base/** linguist-generated
+src/deploy/k8s/overlays/** linguist-generated
+src/config/recipes*.json linguist-generated
+
+# Output of src/models/generate.py and verify.py
+src/models/generated/** linguist-generated
+src/models/results/** linguist-generated
+
+# Recorded validation runs
+src/docs/evidence/** linguist-generated
+
+src/frontend/package-lock.json linguist-generated

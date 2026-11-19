@@ -1,0 +1,405 @@
+{
+  "recorded_at": "2026-10-28T10:56:46.370907+00:00",
+  "source_git_sha": "8dbf736171b426c0678f89662e3dad8b57e0973d",
+  "scope": "equipment-only schema2, isolated Compose smoke and failure checks",
+  "smoke_output": "PASS: six controller types, idempotent order, STOP/resume, batch 22bcb6b4-3568-4fb6-b055-a2e2f4618aa7, telemetry and unique completion",
+  "images": {
+    "backend": "sha256:20fa2f06e9835fe048afcad72665ac7c5c7af57587f41d348fa50fcec3aaf340",
+    "machine": "sha256:f01f054eee1100590d332288934eee9daaf3f6c1436a1294488b92f5ea201d0c",
+    "inventory": "sha256:2991055a456cfbe81fcef9cc8ae6eabc24d47c0359543ff3196855033c965c1f",
+    "frontend": "sha256:f25ca6d74c27cea95a64c4a44b6a1100c24be1b8ecbc613d314bf7b880438ff0"
+  },
+  "machine_mounts": {
+    "mash-0": [],
+    "lauter-0": [],
+    "kettle-0": [],
+    "whirlpool-0": [],
+    "unitank-0": [],
+    "filter-0": []
+  },
+  "inventory_mounts": [],
+  "line": {
+    "id": 1,
+    "epoch": 3,
+    "sim_origin": "2026-10-28T10:49:54.424080Z",
+    "time_scale": 2.0,
+    "stopped": true,
+    "control_version": 3,
+    "policy": "CONWIP",
+    "wip_limit": 1,
+    "run_id": "interactive",
+    "horizon_h": null,
+    "experiment_start_h": 0.0,
+    "experiment_done": true,
+    "restart_blocked": true,
+    "failure_reason": "Controller mash-0 restarted with unresolved production; a clean factory is required",
+    "sim_time_h": 206.2836715,
+    "active_wip": 1,
+    "recovery_required": true,
+    "machines_pending_stop": []
+  },
+  "experiment/status": {
+    "run_id": "interactive",
+    "policy": "CONWIP",
+    "wip_limit": 1,
+    "started": 3,
+    "failed": true,
+    "failure_reason": "Controller mash-0 restarted with unresolved production; a clean factory is required",
+    "requires_clean_factory": true,
+    "completed": 1,
+    "spoiled": 0,
+    "operator_discarded": 1,
+    "hl_out": 50,
+    "hl_wasted": 50,
+    "active_wip": 1,
+    "sim_clock_h": 206.2944745,
+    "elapsed_h": 206.2944745,
+    "start_sim_h": 0.0,
+    "done": true
+  },
+  "batches": [
+    {
+      "id": "22bcb6b4-3568-4fb6-b055-a2e2f4618aa7",
+      "order_id": "6b979931-42b5-43ac-8c58-baa564455564",
+      "recipe_id": "ale",
+      "recipe_version_id": "ale:1",
+      "recipe": {
+        "id": "ale",
+        "name": "Ale",
+        "stages": [
+          {
+            "type": "mash",
+            "hold_h": 10,
+            "phases": [
+              {
+                "name": "mash",
+                "duration_h": 1,
+                "target_temp_c": 65
+              }
+            ],
+            "max_pause_h": 10
+          },
+          {
+            "type": "lauter",
+            "hold_h": 10,
+            "phases": [
+              {
+                "name": "lauter",
+                "duration_h": 1,
+                "target_temp_c": 76
+              }
+            ],
+            "max_pause_h": 10
+          },
+          {
+            "type": "kettle",
+            "hold_h": 10,
+            "phases": [
+              {
+                "name": "kettle",
+                "duration_h": 1,
+                "target_temp_c": 100
+              }
+            ],
+            "max_pause_h": 10
+          },
+          {
+            "type": "whirlpool",
+            "hold_h": 10,
+            "phases": [
+              {
+                "name": "whirlpool",
+                "duration_h": 1,
+                "target_temp_c": 20
+              }
+            ],
+            "max_pause_h": 10
+          },
+          {
+            "type": "unitank",
+            "hold_h": 168,
+            "phases": [
+              {
+                "name": "fermentation",
+                "duration_h": 1,
+                "target_temp_c": 20
+              },
+              {
+                "name": "maturation",
+                "duration_h": 1,
+                "target_temp_c": 2
+              }
+            ],
+            "max_pause_h": 168
+          },
+          {
+            "type": "filter",
+            "hold_h": null,
+            "phases": [
+              {
+                "name": "filter",
+                "duration_h": 1,
+                "target_temp_c": 3
+              }
+            ],
+            "max_pause_h": 10
+          }
+        ],
+        "flush_h": 0.1,
+        "version": 1,
+        "volume_hl": 50,
+        "transfer_h": 0.1,
+        "ingredients": {
+          "hops_kg": 20,
+          "malt_kg": 900,
+          "water_l": 6000,
+          "yeast_kg": 10
+        }
+      },
+      "status": "COMPLETED",
+      "stage": 5,
+      "machine_id": "filter-0",
+      "execution_id": "40145cb7-4c29-4240-a1dd-4e938defd9fb",
+      "run_id": "interactive",
+      "volume_hl": 50,
+      "loss_reason": null,
+      "created_at": "2026-10-28T10:51:59.062637Z",
+      "completed_at": "2026-10-28T10:53:15.250281Z",
+      "admitted_sim_h": 63.8139275,
+      "completed_sim_h": 100.4854385,
+      "phase_index": 0,
+      "hold_deadline_h": null,
+      "pause_started_h": null,
+      "pause_accumulated_h": 0.0
+    },
+    {
+      "id": "b20ccb18-956e-4b01-9e38-28abb6debfa6",
+      "order_id": "aa2c838e-e079-449d-b28a-3fb66d4db03f",
+      "recipe_id": "failure-832e0337-b388-4505-93b2-800cc722fb40",
+      "recipe_version_id": "failure-832e0337-b388-4505-93b2-800cc722fb40:1",
+      "recipe": {
+        "id": "failure-832e0337-b388-4505-93b2-800cc722fb40",
+        "name": "Equipment outage check",
+        "stages": [
+          {
+            "type": "mash",
+            "hold_h": 1000,
+            "phases": [
+              {
+                "name": "mash",
+                "duration_h": 1000,
+                "target_temp_c": 65
+              }
+            ],
+            "max_pause_h": 1000
+          },
+          {
+            "type": "lauter",
+            "hold_h": 1000,
+            "phases": [
+              {
+                "name": "lauter",
+                "duration_h": 1000,
+                "target_temp_c": 76
+              }
+            ],
+            "max_pause_h": 1000
+          },
+          {
+            "type": "kettle",
+            "hold_h": 1000,
+            "phases": [
+              {
+                "name": "kettle",
+                "duration_h": 1000,
+                "target_temp_c": 100
+              }
+            ],
+            "max_pause_h": 1000
+          },
+          {
+            "type": "whirlpool",
+            "hold_h": 1000,
+            "phases": [
+              {
+                "name": "whirlpool",
+                "duration_h": 1000,
+                "target_temp_c": 20
+              }
+            ],
+            "max_pause_h": 1000
+          },
+          {
+            "type": "unitank",
+            "hold_h": 1000,
+            "phases": [
+              {
+                "name": "fermentation",
+                "duration_h": 1000,
+                "target_temp_c": 20
+              },
+              {
+                "name": "maturation",
+                "duration_h": 1000,
+                "target_temp_c": 2
+              }
+            ],
+            "max_pause_h": 1000
+          },
+          {
+            "type": "filter",
+            "hold_h": null,
+            "phases": [
+              {
+                "name": "filter",
+                "duration_h": 1000,
+                "target_temp_c": 3
+              }
+            ],
+            "max_pause_h": 1000
+          }
+        ],
+        "flush_h": 0.1,
+        "version": 1,
+        "volume_hl": 50,
+        "transfer_h": 0.1,
+        "ingredients": {
+          "hops_kg": 20,
+          "malt_kg": 900,
+          "water_l": 6000,
+          "yeast_kg": 10
+        }
+      },
+      "status": "DISCARDED",
+      "stage": 0,
+      "machine_id": "mash-0",
+      "execution_id": "aed23be3-aa2a-4fb6-bb0e-eb27e3dccbd3",
+      "run_id": "interactive",
+      "volume_hl": 50,
+      "loss_reason": "operator",
+      "created_at": "2026-10-28T10:54:26.888664Z",
+      "completed_at": "2026-10-28T10:55:39.255571Z",
+      "admitted_sim_h": 136.283748,
+      "completed_sim_h": 172.4185015,
+      "phase_index": 0,
+      "hold_deadline_h": null,
+      "pause_started_h": null,
+      "pause_accumulated_h": 13.15648225050009
+    },
+    {
+      "id": "7324edd4-46fb-4342-8bd8-697dd8e00864",
+      "order_id": "e15db0b0-001f-4c9b-9310-6aff145e292e",
+      "recipe_id": "failure-832e0337-b388-4505-93b2-800cc722fb40",
+      "recipe_version_id": "failure-832e0337-b388-4505-93b2-800cc722fb40:1",
+      "recipe": {
+        "id": "failure-832e0337-b388-4505-93b2-800cc722fb40",
+        "name": "Equipment outage check",
+        "stages": [
+          {
+            "type": "mash",
+            "hold_h": 1000,
+            "phases": [
+              {
+                "name": "mash",
+                "duration_h": 1000,
+                "target_temp_c": 65
+              }
+            ],
+            "max_pause_h": 1000
+          },
+          {
+            "type": "lauter",
+            "hold_h": 1000,
+            "phases": [
+              {
+                "name": "lauter",
+                "duration_h": 1000,
+                "target_temp_c": 76
+              }
+            ],
+            "max_pause_h": 1000
+          },
+          {
+            "type": "kettle",
+            "hold_h": 1000,
+            "phases": [
+              {
+                "name": "kettle",
+                "duration_h": 1000,
+                "target_temp_c": 100
+              }
+            ],
+            "max_pause_h": 1000
+          },
+          {
+            "type": "whirlpool",
+            "hold_h": 1000,
+            "phases": [
+              {
+                "name": "whirlpool",
+                "duration_h": 1000,
+                "target_temp_c": 20
+              }
+            ],
+            "max_pause_h": 1000
+          },
+          {
+            "type": "unitank",
+            "hold_h": 1000,
+            "phases": [
+              {
+                "name": "fermentation",
+                "duration_h": 1000,
+                "target_temp_c": 20
+              },
+              {
+                "name": "maturation",
+                "duration_h": 1000,
+                "target_temp_c": 2
+              }
+            ],
+            "max_pause_h": 1000
+          },
+          {
+            "type": "filter",
+            "hold_h": null,
+            "phases": [
+              {
+                "name": "filter",
+                "duration_h": 1000,
+                "target_temp_c": 3
+              }
+            ],
+            "max_pause_h": 1000
+          }
+        ],
+        "flush_h": 0.1,
+        "version": 1,
+        "volume_hl": 50,
+        "transfer_h": 0.1,
+        "ingredients": {
+          "hops_kg": 20,
+          "malt_kg": 900,
+          "water_l": 6000,
+          "yeast_kg": 10
+        }
+      },
+      "status": "UNRESOLVED",
+      "stage": 0,
+      "machine_id": "mash-0",
+      "execution_id": "e9d7e01a-dceb-45bf-bd82-99077059bf30",
+      "run_id": "interactive",
+      "volume_hl": 50,
+      "loss_reason": null,
+      "created_at": "2026-10-28T10:55:40.141714Z",
+      "completed_at": null,
+      "admitted_sim_h": 172.966677,
+      "completed_sim_h": null,
+      "phase_index": 0,
+      "hold_deadline_h": null,
+      "pause_started_h": null,
+      "pause_accumulated_h": 0.0
+    }
+  ],
+  "failure_evidence": "equipment-failures-2026-10-28.json"
+}

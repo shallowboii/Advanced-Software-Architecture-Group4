@@ -1,0 +1,89 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "StatefulSet",
+  "metadata": {
+    "name": "lauter"
+  },
+  "spec": {
+    "serviceName": "lauter",
+    "replicas": 1,
+    "podManagementPolicy": "Parallel",
+    "updateStrategy": {
+      "type": "OnDelete"
+    },
+    "selector": {
+      "matchLabels": {
+        "app": "machine",
+        "machine-type": "lauter"
+      }
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "machine",
+          "machine-type": "lauter"
+        }
+      },
+      "spec": {
+        "terminationGracePeriodSeconds": 30,
+        "containers": [
+          {
+            "name": "machine",
+            "image": "beerfactory-machine:dev",
+            "env": [
+              {
+                "name": "MACHINE_ID",
+                "valueFrom": {
+                  "fieldRef": {
+                    "fieldPath": "metadata.name"
+                  }
+                }
+              },
+              {
+                "name": "MACHINE_TYPE",
+                "value": "lauter"
+              },
+              {
+                "name": "MQTT_URL",
+                "value": "tcp://rabbitmq:1883"
+              },
+              {
+                "name": "MQTT_USERNAME",
+                "value": "beerfactory"
+              },
+              {
+                "name": "MQTT_PASSWORD",
+                "value": "development-only"
+              },
+              {
+                "name": "KAFKA_BROKERS",
+                "value": "kafka:9092"
+              },
+              {
+                "name": "TIME_SCALE",
+                "value": "2"
+              },
+              {
+                "name": "SOCKET_PATH",
+                "value": "/tmp/machine.sock"
+              },
+              {
+                "name": "FLUSH_H",
+                "value": "0.1"
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "10m",
+                "memory": "24Mi"
+              },
+              "limits": {
+                "memory": "128Mi"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

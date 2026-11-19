@@ -1,0 +1,856 @@
+{
+  "passed": true,
+  "run_key": "failure-832e0337-b388-4505-93b2-800cc722fb40",
+  "steps": [
+    {
+      "name": "isolated equipment-only factory ready",
+      "ts_utc": "2026-10-28T10:54:26.863833+00:00",
+      "details": {
+        "schema_version": 2,
+        "machine_id": "mash-0",
+        "type": "mash",
+        "controller_boot_id": "96fbb1bd-e56c-490f-9cac-b66df3c76209",
+        "state": "EMPTY",
+        "current_command_id": null,
+        "interrupted_command_id": null,
+        "transfer_role": null,
+        "ts_utc": "2026-10-28T10:54:26Z",
+        "occupied": false,
+        "duration_h": 0,
+        "elapsed_h": 0,
+        "target_temp_c": 0,
+        "transfer_ready": false,
+        "flush_requested": false,
+        "local_stop": false,
+        "global_stop": false,
+        "stopped": false,
+        "permit_valid": true,
+        "epoch": 2,
+        "state_version": 11,
+        "machine_sequence": 11,
+        "sim_time_h": 153.0941274234999
+      }
+    },
+    {
+      "name": "backend outage pauses actuator while clock ages",
+      "ts_utc": "2026-10-28T10:54:54.359269+00:00",
+      "details": {
+        "paused": {
+          "schema_version": 2,
+          "machine_id": "mash-0",
+          "type": "mash",
+          "controller_boot_id": "96fbb1bd-e56c-490f-9cac-b66df3c76209",
+          "state": "PROCESSING",
+          "current_command_id": "40e79317-d6f0-4f72-9d0f-0bd11f59b358",
+          "interrupted_command_id": null,
+          "transfer_role": null,
+          "ts_utc": "2026-10-28T10:54:32Z",
+          "occupied": true,
+          "duration_h": 1000,
+          "elapsed_h": 1.9492086669999935,
+          "target_temp_c": 65,
+          "transfer_ready": false,
+          "flush_requested": false,
+          "local_stop": false,
+          "global_stop": false,
+          "stopped": true,
+          "permit_valid": false,
+          "epoch": 2,
+          "state_version": 12,
+          "machine_sequence": 12,
+          "sim_time_h": 155.96797596649992
+        },
+        "recovered": {
+          "schema_version": 2,
+          "machine_id": "mash-0",
+          "type": "mash",
+          "controller_boot_id": "96fbb1bd-e56c-490f-9cac-b66df3c76209",
+          "state": "PROCESSING",
+          "current_command_id": "40e79317-d6f0-4f72-9d0f-0bd11f59b358",
+          "interrupted_command_id": null,
+          "transfer_role": null,
+          "ts_utc": "2026-10-28T10:54:54Z",
+          "occupied": true,
+          "duration_h": 1000,
+          "elapsed_h": 2.003848896500017,
+          "target_temp_c": 65,
+          "transfer_ready": false,
+          "flush_requested": false,
+          "local_stop": false,
+          "global_stop": false,
+          "stopped": false,
+          "permit_valid": true,
+          "epoch": 3,
+          "state_version": 12,
+          "machine_sequence": 12,
+          "sim_time_h": 166.88165661749997
+        }
+      }
+    },
+    {
+      "name": "MQTT outage retains the same in-process operation",
+      "ts_utc": "2026-10-28T10:55:16.647867+00:00",
+      "details": {
+        "paused": {
+          "schema_version": 2,
+          "machine_id": "mash-0",
+          "type": "mash",
+          "controller_boot_id": "96fbb1bd-e56c-490f-9cac-b66df3c76209",
+          "state": "PROCESSING",
+          "current_command_id": "40e79317-d6f0-4f72-9d0f-0bd11f59b358",
+          "interrupted_command_id": null,
+          "transfer_role": null,
+          "ts_utc": "2026-10-28T10:54:59Z",
+          "occupied": true,
+          "duration_h": 1000,
+          "elapsed_h": 3.586671583999987,
+          "target_temp_c": 65,
+          "transfer_ready": false,
+          "flush_requested": false,
+          "local_stop": false,
+          "global_stop": false,
+          "stopped": true,
+          "permit_valid": false,
+          "epoch": 3,
+          "state_version": 12,
+          "machine_sequence": 12,
+          "sim_time_h": 169.3935135145
+        },
+        "recovered": {
+          "schema_version": 2,
+          "machine_id": "mash-0",
+          "type": "mash",
+          "controller_boot_id": "96fbb1bd-e56c-490f-9cac-b66df3c76209",
+          "state": "PROCESSING",
+          "current_command_id": "40e79317-d6f0-4f72-9d0f-0bd11f59b358",
+          "interrupted_command_id": null,
+          "transfer_role": null,
+          "ts_utc": "2026-10-28T10:55:16Z",
+          "occupied": true,
+          "duration_h": 1000,
+          "elapsed_h": 3.9132041885000035,
+          "target_temp_c": 65,
+          "transfer_ready": false,
+          "flush_requested": false,
+          "local_stop": false,
+          "global_stop": false,
+          "stopped": false,
+          "permit_valid": true,
+          "epoch": 3,
+          "state_version": 12,
+          "machine_sequence": 12,
+          "sim_time_h": 178.04152716449994
+        }
+      }
+    },
+    {
+      "name": "Kafka outage leaves control running; telemetry recovers",
+      "ts_utc": "2026-10-28T10:55:34.682449+00:00",
+      "details": {
+        "physical_during_outage": {
+          "schema_version": 2,
+          "machine_id": "mash-0",
+          "type": "mash",
+          "controller_boot_id": "96fbb1bd-e56c-490f-9cac-b66df3c76209",
+          "state": "PROCESSING",
+          "current_command_id": "40e79317-d6f0-4f72-9d0f-0bd11f59b358",
+          "interrupted_command_id": null,
+          "transfer_role": null,
+          "ts_utc": "2026-10-28T10:55:20Z",
+          "occupied": true,
+          "duration_h": 1000,
+          "elapsed_h": 5.9362959810000575,
+          "target_temp_c": 65,
+          "transfer_ready": false,
+          "flush_requested": false,
+          "local_stop": false,
+          "global_stop": false,
+          "stopped": false,
+          "permit_valid": true,
+          "epoch": 3,
+          "state_version": 12,
+          "machine_sequence": 12,
+          "sim_time_h": 180.064618957
+        },
+        "recovered_samples": 20
+      }
+    },
+    {
+      "name": "local STOP and resume retain contents in the same boot",
+      "ts_utc": "2026-10-28T10:55:38.384629+00:00",
+      "details": {
+        "paused": {
+          "schema_version": 2,
+          "machine_id": "mash-0",
+          "type": "mash",
+          "controller_boot_id": "96fbb1bd-e56c-490f-9cac-b66df3c76209",
+          "state": "PROCESSING",
+          "current_command_id": "40e79317-d6f0-4f72-9d0f-0bd11f59b358",
+          "interrupted_command_id": null,
+          "transfer_role": null,
+          "ts_utc": "2026-10-28T10:55:37Z",
+          "occupied": true,
+          "duration_h": 1000,
+          "elapsed_h": 13.202371900999992,
+          "target_temp_c": 65,
+          "transfer_ready": false,
+          "flush_requested": false,
+          "local_stop": true,
+          "global_stop": false,
+          "stopped": true,
+          "permit_valid": true,
+          "epoch": 3,
+          "state_version": 13,
+          "machine_sequence": 13,
+          "sim_time_h": 188.51008696099996
+        },
+        "resumed": {
+          "schema_version": 2,
+          "machine_id": "mash-0",
+          "type": "mash",
+          "controller_boot_id": "96fbb1bd-e56c-490f-9cac-b66df3c76209",
+          "state": "PROCESSING",
+          "current_command_id": "40e79317-d6f0-4f72-9d0f-0bd11f59b358",
+          "interrupted_command_id": null,
+          "transfer_role": null,
+          "ts_utc": "2026-10-28T10:55:38Z",
+          "occupied": true,
+          "duration_h": 1000,
+          "elapsed_h": 13.375162047000003,
+          "target_temp_c": 65,
+          "transfer_ready": false,
+          "flush_requested": false,
+          "local_stop": false,
+          "global_stop": false,
+          "stopped": false,
+          "permit_valid": true,
+          "epoch": 3,
+          "state_version": 14,
+          "machine_sequence": 14,
+          "sim_time_h": 188.9085212735
+        }
+      }
+    },
+    {
+      "name": "one admission and one operator loss within one controller boot",
+      "ts_utc": "2026-10-28T10:55:39.925761+00:00",
+      "details": {
+        "batch": {
+          "id": "b20ccb18-956e-4b01-9e38-28abb6debfa6",
+          "order_id": "aa2c838e-e079-449d-b28a-3fb66d4db03f",
+          "recipe_id": "failure-832e0337-b388-4505-93b2-800cc722fb40",
+          "recipe_version_id": "failure-832e0337-b388-4505-93b2-800cc722fb40:1",
+          "recipe": {
+            "id": "failure-832e0337-b388-4505-93b2-800cc722fb40",
+            "name": "Equipment outage check",
+            "stages": [
+              {
+                "type": "mash",
+                "hold_h": 1000,
+                "phases": [
+                  {
+                    "name": "mash",
+                    "duration_h": 1000,
+                    "target_temp_c": 65
+                  }
+                ],
+                "max_pause_h": 1000
+              },
+              {
+                "type": "lauter",
+                "hold_h": 1000,
+                "phases": [
+                  {
+                    "name": "lauter",
+                    "duration_h": 1000,
+                    "target_temp_c": 76
+                  }
+                ],
+                "max_pause_h": 1000
+              },
+              {
+                "type": "kettle",
+                "hold_h": 1000,
+                "phases": [
+                  {
+                    "name": "kettle",
+                    "duration_h": 1000,
+                    "target_temp_c": 100
+                  }
+                ],
+                "max_pause_h": 1000
+              },
+              {
+                "type": "whirlpool",
+                "hold_h": 1000,
+                "phases": [
+                  {
+                    "name": "whirlpool",
+                    "duration_h": 1000,
+                    "target_temp_c": 20
+                  }
+                ],
+                "max_pause_h": 1000
+              },
+              {
+                "type": "unitank",
+                "hold_h": 1000,
+                "phases": [
+                  {
+                    "name": "fermentation",
+                    "duration_h": 1000,
+                    "target_temp_c": 20
+                  },
+                  {
+                    "name": "maturation",
+                    "duration_h": 1000,
+                    "target_temp_c": 2
+                  }
+                ],
+                "max_pause_h": 1000
+              },
+              {
+                "type": "filter",
+                "hold_h": null,
+                "phases": [
+                  {
+                    "name": "filter",
+                    "duration_h": 1000,
+                    "target_temp_c": 3
+                  }
+                ],
+                "max_pause_h": 1000
+              }
+            ],
+            "flush_h": 0.1,
+            "version": 1,
+            "volume_hl": 50,
+            "transfer_h": 0.1,
+            "ingredients": {
+              "hops_kg": 20,
+              "malt_kg": 900,
+              "water_l": 6000,
+              "yeast_kg": 10
+            }
+          },
+          "status": "DISCARDED",
+          "stage": 0,
+          "machine_id": "mash-0",
+          "execution_id": "aed23be3-aa2a-4fb6-bb0e-eb27e3dccbd3",
+          "run_id": "interactive",
+          "volume_hl": 50,
+          "loss_reason": "operator",
+          "created_at": "2026-10-28T10:54:26.888664Z",
+          "completed_at": "2026-10-28T10:55:39.255571Z",
+          "admitted_sim_h": 136.283748,
+          "completed_sim_h": 172.4185015,
+          "phase_index": 0,
+          "hold_deadline_h": null,
+          "pause_started_h": null,
+          "pause_accumulated_h": 13.15648225050009
+        },
+        "physical": {
+          "schema_version": 2,
+          "machine_id": "mash-0",
+          "type": "mash",
+          "controller_boot_id": "96fbb1bd-e56c-490f-9cac-b66df3c76209",
+          "state": "EMPTY",
+          "current_command_id": null,
+          "interrupted_command_id": null,
+          "transfer_role": null,
+          "ts_utc": "2026-10-28T10:55:39Z",
+          "occupied": false,
+          "duration_h": 0,
+          "elapsed_h": 0,
+          "target_temp_c": 0,
+          "transfer_ready": false,
+          "flush_requested": false,
+          "local_stop": false,
+          "global_stop": false,
+          "stopped": false,
+          "permit_valid": true,
+          "epoch": 3,
+          "state_version": 18,
+          "machine_sequence": 17,
+          "sim_time_h": 189.65049304449997
+        },
+        "loss": {
+          "event": "LOSS_RECORDED",
+          "reason": "operator",
+          "run_id": "interactive",
+          "ts_utc": "2026-10-28T10:55:39.147155590Z",
+          "batch_id": "b20ccb18-956e-4b01-9e38-28abb6debfa6",
+          "event_id": "ed8b1257-7a09-4aa7-960d-d3ec4cb0bd46",
+          "volume_hl": 50,
+          "machine_id": "mash-0",
+          "sim_time_h": 172.3609745,
+          "recorded_seq": 107,
+          "schema_version": 1,
+          "controller_boot_id": "96fbb1bd-e56c-490f-9cac-b66df3c76209"
+        }
+      }
+    },
+    {
+      "name": "active operation before final controller restart",
+      "ts_utc": "2026-10-28T10:55:40.824959+00:00",
+      "details": {
+        "batch": {
+          "id": "7324edd4-46fb-4342-8bd8-697dd8e00864",
+          "order_id": "e15db0b0-001f-4c9b-9310-6aff145e292e",
+          "recipe_id": "failure-832e0337-b388-4505-93b2-800cc722fb40",
+          "recipe_version_id": "failure-832e0337-b388-4505-93b2-800cc722fb40:1",
+          "recipe": {
+            "id": "failure-832e0337-b388-4505-93b2-800cc722fb40",
+            "name": "Equipment outage check",
+            "stages": [
+              {
+                "type": "mash",
+                "hold_h": 1000,
+                "phases": [
+                  {
+                    "name": "mash",
+                    "duration_h": 1000,
+                    "target_temp_c": 65
+                  }
+                ],
+                "max_pause_h": 1000
+              },
+              {
+                "type": "lauter",
+                "hold_h": 1000,
+                "phases": [
+                  {
+                    "name": "lauter",
+                    "duration_h": 1000,
+                    "target_temp_c": 76
+                  }
+                ],
+                "max_pause_h": 1000
+              },
+              {
+                "type": "kettle",
+                "hold_h": 1000,
+                "phases": [
+                  {
+                    "name": "kettle",
+                    "duration_h": 1000,
+                    "target_temp_c": 100
+                  }
+                ],
+                "max_pause_h": 1000
+              },
+              {
+                "type": "whirlpool",
+                "hold_h": 1000,
+                "phases": [
+                  {
+                    "name": "whirlpool",
+                    "duration_h": 1000,
+                    "target_temp_c": 20
+                  }
+                ],
+                "max_pause_h": 1000
+              },
+              {
+                "type": "unitank",
+                "hold_h": 1000,
+                "phases": [
+                  {
+                    "name": "fermentation",
+                    "duration_h": 1000,
+                    "target_temp_c": 20
+                  },
+                  {
+                    "name": "maturation",
+                    "duration_h": 1000,
+                    "target_temp_c": 2
+                  }
+                ],
+                "max_pause_h": 1000
+              },
+              {
+                "type": "filter",
+                "hold_h": null,
+                "phases": [
+                  {
+                    "name": "filter",
+                    "duration_h": 1000,
+                    "target_temp_c": 3
+                  }
+                ],
+                "max_pause_h": 1000
+              }
+            ],
+            "flush_h": 0.1,
+            "version": 1,
+            "volume_hl": 50,
+            "transfer_h": 0.1,
+            "ingredients": {
+              "hops_kg": 20,
+              "malt_kg": 900,
+              "water_l": 6000,
+              "yeast_kg": 10
+            }
+          },
+          "status": "PROCESSING",
+          "stage": 0,
+          "machine_id": "mash-0",
+          "execution_id": "e9d7e01a-dceb-45bf-bd82-99077059bf30",
+          "run_id": "interactive",
+          "volume_hl": 50,
+          "loss_reason": null,
+          "created_at": "2026-10-28T10:55:40.141714Z",
+          "completed_at": null,
+          "admitted_sim_h": 172.966677,
+          "completed_sim_h": null,
+          "phase_index": 0,
+          "hold_deadline_h": null,
+          "pause_started_h": null,
+          "pause_accumulated_h": 0.0
+        },
+        "physical": {
+          "schema_version": 2,
+          "machine_id": "mash-0",
+          "type": "mash",
+          "controller_boot_id": "96fbb1bd-e56c-490f-9cac-b66df3c76209",
+          "state": "PROCESSING",
+          "current_command_id": "42016534-b434-4ca7-b3a7-7a3ccd6884c7",
+          "interrupted_command_id": null,
+          "transfer_role": null,
+          "ts_utc": "2026-10-28T10:55:40Z",
+          "occupied": true,
+          "duration_h": 1000,
+          "elapsed_h": 0.14430252099998597,
+          "target_temp_c": 65,
+          "transfer_ready": false,
+          "flush_requested": false,
+          "local_stop": false,
+          "global_stop": false,
+          "stopped": false,
+          "permit_valid": true,
+          "epoch": 3,
+          "state_version": 19,
+          "machine_sequence": 18,
+          "sim_time_h": 190.119968545
+        },
+        "counters": {
+          "run_id": "interactive",
+          "policy": "CONWIP",
+          "wip_limit": 1,
+          "started": 3,
+          "failed": false,
+          "failure_reason": null,
+          "requires_clean_factory": false,
+          "completed": 1,
+          "spoiled": 0,
+          "operator_discarded": 1,
+          "hl_out": 50,
+          "hl_wasted": 50,
+          "active_wip": 1,
+          "sim_clock_h": 173.1968015,
+          "elapsed_h": 173.1968015,
+          "start_sim_h": 0.0,
+          "done": false
+        }
+      }
+    },
+    {
+      "name": "controller restart loses RAM; backend blocks resume and retains evidence",
+      "ts_utc": "2026-10-28T10:55:45.058515+00:00",
+      "details": {
+        "physical_after_restart": {
+          "schema_version": 2,
+          "machine_id": "mash-0",
+          "type": "mash",
+          "controller_boot_id": "f1b345b7-b0e2-4b62-9967-e095fca0a663",
+          "state": "EMPTY",
+          "current_command_id": null,
+          "interrupted_command_id": null,
+          "transfer_role": null,
+          "ts_utc": "2026-10-28T10:55:42Z",
+          "occupied": false,
+          "duration_h": 0,
+          "elapsed_h": 0,
+          "target_temp_c": 0,
+          "transfer_ready": false,
+          "flush_requested": false,
+          "local_stop": false,
+          "global_stop": false,
+          "stopped": true,
+          "permit_valid": false,
+          "epoch": 0,
+          "state_version": 0,
+          "machine_sequence": 0,
+          "sim_time_h": 0.07920952099993883
+        },
+        "physical_after_rejection": {
+          "schema_version": 2,
+          "machine_id": "mash-0",
+          "type": "mash",
+          "controller_boot_id": "f1b345b7-b0e2-4b62-9967-e095fca0a663",
+          "state": "EMPTY",
+          "current_command_id": null,
+          "interrupted_command_id": null,
+          "transfer_role": null,
+          "ts_utc": "2026-10-28T10:55:44Z",
+          "occupied": false,
+          "duration_h": 0,
+          "elapsed_h": 0,
+          "target_temp_c": 0,
+          "transfer_ready": false,
+          "flush_requested": false,
+          "local_stop": false,
+          "global_stop": true,
+          "stopped": true,
+          "permit_valid": false,
+          "epoch": 0,
+          "state_version": 2,
+          "machine_sequence": 2,
+          "sim_time_h": 1.4189715425000031
+        },
+        "line": {
+          "id": 1,
+          "epoch": 3,
+          "sim_origin": "2026-10-28T10:49:54.424080Z",
+          "time_scale": 2.0,
+          "stopped": true,
+          "control_version": 3,
+          "policy": "CONWIP",
+          "wip_limit": 1,
+          "run_id": "interactive",
+          "horizon_h": null,
+          "experiment_start_h": 0.0,
+          "experiment_done": true,
+          "restart_blocked": true,
+          "failure_reason": "Controller mash-0 restarted with unresolved production; a clean factory is required",
+          "sim_time_h": 175.1267895,
+          "active_wip": 1,
+          "recovery_required": true,
+          "machines_pending_stop": []
+        },
+        "batch": {
+          "id": "7324edd4-46fb-4342-8bd8-697dd8e00864",
+          "order_id": "e15db0b0-001f-4c9b-9310-6aff145e292e",
+          "recipe_id": "failure-832e0337-b388-4505-93b2-800cc722fb40",
+          "recipe_version_id": "failure-832e0337-b388-4505-93b2-800cc722fb40:1",
+          "recipe": {
+            "id": "failure-832e0337-b388-4505-93b2-800cc722fb40",
+            "name": "Equipment outage check",
+            "stages": [
+              {
+                "type": "mash",
+                "hold_h": 1000,
+                "phases": [
+                  {
+                    "name": "mash",
+                    "duration_h": 1000,
+                    "target_temp_c": 65
+                  }
+                ],
+                "max_pause_h": 1000
+              },
+              {
+                "type": "lauter",
+                "hold_h": 1000,
+                "phases": [
+                  {
+                    "name": "lauter",
+                    "duration_h": 1000,
+                    "target_temp_c": 76
+                  }
+                ],
+                "max_pause_h": 1000
+              },
+              {
+                "type": "kettle",
+                "hold_h": 1000,
+                "phases": [
+                  {
+                    "name": "kettle",
+                    "duration_h": 1000,
+                    "target_temp_c": 100
+                  }
+                ],
+                "max_pause_h": 1000
+              },
+              {
+                "type": "whirlpool",
+                "hold_h": 1000,
+                "phases": [
+                  {
+                    "name": "whirlpool",
+                    "duration_h": 1000,
+                    "target_temp_c": 20
+                  }
+                ],
+                "max_pause_h": 1000
+              },
+              {
+                "type": "unitank",
+                "hold_h": 1000,
+                "phases": [
+                  {
+                    "name": "fermentation",
+                    "duration_h": 1000,
+                    "target_temp_c": 20
+                  },
+                  {
+                    "name": "maturation",
+                    "duration_h": 1000,
+                    "target_temp_c": 2
+                  }
+                ],
+                "max_pause_h": 1000
+              },
+              {
+                "type": "filter",
+                "hold_h": null,
+                "phases": [
+                  {
+                    "name": "filter",
+                    "duration_h": 1000,
+                    "target_temp_c": 3
+                  }
+                ],
+                "max_pause_h": 1000
+              }
+            ],
+            "flush_h": 0.1,
+            "version": 1,
+            "volume_hl": 50,
+            "transfer_h": 0.1,
+            "ingredients": {
+              "hops_kg": 20,
+              "malt_kg": 900,
+              "water_l": 6000,
+              "yeast_kg": 10
+            }
+          },
+          "status": "UNRESOLVED",
+          "stage": 0,
+          "machine_id": "mash-0",
+          "execution_id": "e9d7e01a-dceb-45bf-bd82-99077059bf30",
+          "run_id": "interactive",
+          "volume_hl": 50,
+          "loss_reason": null,
+          "created_at": "2026-10-28T10:55:40.141714Z",
+          "completed_at": null,
+          "admitted_sim_h": 172.966677,
+          "completed_sim_h": null,
+          "phase_index": 0,
+          "hold_deadline_h": null,
+          "pause_started_h": null,
+          "pause_accumulated_h": 0.0
+        },
+        "experiment": {
+          "run_id": "interactive",
+          "policy": "CONWIP",
+          "wip_limit": 1,
+          "started": 3,
+          "failed": true,
+          "failure_reason": "Controller mash-0 restarted with unresolved production; a clean factory is required",
+          "requires_clean_factory": true,
+          "completed": 1,
+          "spoiled": 0,
+          "operator_discarded": 1,
+          "hl_out": 50,
+          "hl_wasted": 50,
+          "active_wip": 1,
+          "sim_clock_h": 175.119513,
+          "elapsed_h": 175.119513,
+          "start_sim_h": 0.0,
+          "done": true
+        },
+        "resume_rejection": "POST /line/resume: HTTP 409: {\"error\":\"conflict\",\"message\":\"Controller state was lost; start a clean factory before resuming\"}",
+        "events": [
+          {
+            "event": "CONTROLLER_STATE_LOST",
+            "reason": "Controller mash-0 restarted with unresolved production; a clean factory is required",
+            "run_id": "interactive",
+            "ts_utc": "2026-10-28T10:55:44.205106759Z",
+            "batch_id": "7324edd4-46fb-4342-8bd8-697dd8e00864",
+            "event_id": "2bf9efc0-47d6-4e63-ab66-d7bc64a84fe3",
+            "machine_id": "mash-0",
+            "sim_time_h": 174.8902325,
+            "recorded_seq": 113,
+            "schema_version": 1,
+            "controller_boot_id": "f1b345b7-b0e2-4b62-9967-e095fca0a663",
+            "requires_clean_factory": true
+          },
+          {
+            "type": "mash",
+            "event": "STARTED",
+            "phase": "mash",
+            "scope": null,
+            "reason": null,
+            "run_id": "interactive",
+            "ts_utc": "2026-10-28T10:55:40.490468507Z",
+            "accepted": true,
+            "batch_id": "7324edd4-46fb-4342-8bd8-697dd8e00864",
+            "event_id": "5cb165b3-b8c5-4a35-b64e-800791c5c108",
+            "snapshot": {
+              "type": "mash",
+              "epoch": 3,
+              "state": "PROCESSING",
+              "ts_utc": "2026-10-28T10:55:40Z",
+              "stopped": false,
+              "occupied": true,
+              "elapsed_h": 0,
+              "duration_h": 1000,
+              "local_stop": false,
+              "machine_id": "mash-0",
+              "sim_time_h": 189.97566602400002,
+              "global_stop": false,
+              "permit_valid": true,
+              "state_version": 19,
+              "target_temp_c": 65,
+              "transfer_role": null,
+              "schema_version": 2,
+              "transfer_ready": false,
+              "flush_requested": false,
+              "machine_sequence": 18,
+              "controller_boot_id": "96fbb1bd-e56c-490f-9cac-b66df3c76209",
+              "current_command_id": "42016534-b434-4ca7-b3a7-7a3ccd6884c7",
+              "interrupted_command_id": null
+            },
+            "command_id": "42016534-b434-4ca7-b3a7-7a3ccd6884c7",
+            "machine_id": "mash-0",
+            "message_id": "5cb165b3-b8c5-4a35-b64e-800791c5c108",
+            "sim_time_h": 189.97566602400002,
+            "phase_index": 0,
+            "execution_id": "e9d7e01a-dceb-45bf-bd82-99077059bf30",
+            "recorded_seq": 112,
+            "schema_version": 1,
+            "machine_sequence": 18,
+            "recipe_version_id": "failure-832e0337-b388-4505-93b2-800cc722fb40:1",
+            "contents_discarded": false,
+            "controller_boot_id": "96fbb1bd-e56c-490f-9cac-b66df3c76209",
+            "current_command_id": "42016534-b434-4ca7-b3a7-7a3ccd6884c7",
+            "interrupted_command_id": null
+          },
+          {
+            "event": "ADMITTED",
+            "run_id": "interactive",
+            "ts_utc": "2026-10-28T10:55:40.362302632Z",
+            "batch_id": "7324edd4-46fb-4342-8bd8-697dd8e00864",
+            "event_id": "6d613a04-54c7-4ee4-82e8-25d1535f2452",
+            "order_id": "e15db0b0-001f-4c9b-9310-6aff145e292e",
+            "volume_hl": 50,
+            "machine_id": "mash-0",
+            "sim_time_h": 172.968951,
+            "recorded_seq": 111,
+            "schema_version": 1,
+            "recipe_version_id": "failure-832e0337-b388-4505-93b2-800cc722fb40:1",
+            "controller_boot_id": "96fbb1bd-e56c-490f-9cac-b66df3c76209"
+          }
+        ]
+      }
+    }
+  ],
+  "final_state": {
+    "line_stopped": true,
+    "recovery_required": true,
+    "unresolved_batch_id": "7324edd4-46fb-4342-8bd8-697dd8e00864",
+    "requires_clean_factory": true
+  }
+}

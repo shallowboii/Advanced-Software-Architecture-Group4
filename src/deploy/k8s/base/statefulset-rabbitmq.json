@@ -1,0 +1,103 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "StatefulSet",
+  "metadata": {
+    "name": "rabbitmq"
+  },
+  "spec": {
+    "replicas": 1,
+    "selector": {
+      "matchLabels": {
+        "app": "rabbitmq"
+      }
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "rabbitmq"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "rabbitmq",
+            "image": "rabbitmq:4.1.4-management",
+            "ports": [
+              {
+                "containerPort": 1883
+              }
+            ],
+            "env": [
+              {
+                "name": "RABBITMQ_DEFAULT_USER",
+                "value": "beerfactory"
+              },
+              {
+                "name": "RABBITMQ_DEFAULT_PASS",
+                "value": "development-only"
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              },
+              "limits": {
+                "memory": "1Gi"
+              }
+            },
+            "readinessProbe": {
+              "tcpSocket": {
+                "port": 1883
+              },
+              "initialDelaySeconds": 5,
+              "periodSeconds": 5
+            },
+            "volumeMounts": [
+              {
+                "name": "plugins",
+                "mountPath": "/etc/rabbitmq/enabled_plugins",
+                "subPath": "enabled_plugins",
+                "readOnly": true
+              },
+              {
+                "name": "data",
+                "mountPath": "/var/lib/rabbitmq"
+              }
+            ]
+          }
+        ],
+        "volumes": [
+          {
+            "name": "plugins",
+            "configMap": {
+              "name": "rabbitmq-plugins"
+            }
+          }
+        ],
+        "terminationGracePeriodSeconds": 30,
+        "securityContext": {
+          "fsGroup": 999
+        }
+      }
+    },
+    "serviceName": "rabbitmq",
+    "volumeClaimTemplates": [
+      {
+        "metadata": {
+          "name": "data"
+        },
+        "spec": {
+          "accessModes": [
+            "ReadWriteOnce"
+          ],
+          "resources": {
+            "requests": {
+              "storage": "2Gi"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

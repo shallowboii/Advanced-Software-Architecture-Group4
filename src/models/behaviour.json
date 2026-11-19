@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "description": "Two completed upstream batches contend for one downstream machine; reservation guards prevent overbooking. No CIP. Timed progress is abstracted by ticks so STOP can inhibit progress while age advances.",
+  "declaration": "const bool SAFE = $SAFE;\nconst int HOLD = 10;\nint[0,2] reservations = 0;\nint[0,2] destination_owners = 0;\nbool stopped = false;\nbool progressed_while_stopped = false;\nbroadcast chan tick;\n",
+  "templates": [
+    {
+      "name": "Clock",
+      "declaration": "clock x;",
+      "initial": "Running",
+      "states": [{"name": "Running", "invariant": "x <= 1"}],
+      "transitions": [{"source": "Running", "target": "Running", "guard": "x == 1", "sync": "tick!", "effect": "x = 0"}]
+    },
+    {
+      "name": "Operator",
+      "declaration": "clock x;",
+      "initial": "BeforeStop",
+      "states": [{"name": "BeforeStop", "invariant": "x <= 1"}, {"name": "Stopped", "invariant": "x <= 3"}, {"name": "Resumed"}],
+      "transitions": [
+        {"source": "BeforeStop", "target": "Stopped", "guard": "x == 1", "effect": "stopped = true", "requirement": "STOP-1"},
+        {"source": "Stopped", "target": "Resumed", "guard": "x == 3", "effect": "stopped = false", "requirement": "STOP-2"}
+      ]
+    },
+    {
+      "name": "Batch",
+      "parameter": "const int id",
+      "declaration": "int[0,100] age = 0;\nint[0,3] process_ticks = 0;",
+      "initial": "Ready",
+      "states": [{"name": "Ready"}, {"name": "Transfer"}, {"name": "Receiving"}, {"name": "Completed"}, {"name": "Spoiled"}],
+      "transitions": [
+        {"source": "Ready", "target": "Ready", "sync": "tick?", "effect": "age = age < 100 ? age + 1 : age"},
+        {"source": "Ready", "target": "Transfer", "guard": "!stopped && age < HOLD && ((!SAFE && reservations < 2) || reservations == 0)", "effect": "reservations++, process_ticks = 0", "requirement": "TRANSFER-1"},
+        {"source": "Ready", "target": "Spoiled", "guard": "age >= HOLD", "requirement": "HOLD-1"},
+        {"source": "Transfer", "target": "Transfer", "sync": "tick?", "effect": "age = age < 100 ? age + 1 : age, process_ticks = (!stopped && process_ticks < 3) ? process_ticks + 1 : process_ticks", "requirement": "STOP-1"},
+        {"source": "Transfer", "target": "Receiving", "guard": "!stopped && process_ticks >= 2 && age < HOLD", "effect": "destination_owners++, process_ticks = 0", "requirement": "TRANSFER-2"},
+        {"source": "Transfer", "target": "Spoiled", "guard": "age >= HOLD", "effect": "reservations--", "requirement": "HOLD-1"},
+        {"source": "Receiving", "target": "Receiving", "sync": "tick?", "effect": "process_ticks = (!stopped && process_ticks < 3) ? process_ticks + 1 : process_ticks", "requirement": "STOP-1"},
+        {"source": "Receiving", "target": "Completed", "guard": "!stopped && process_ticks >= 2", "effect": "destination_owners--, reservations--", "requirement": "OUTPUT-1"}
+      ]
+    }
+  ],
+  "system": "clock_process = Clock();\noperator_process = Operator();\nbatch0 = Batch(0);\nbatch1 = Batch(1);\nsystem clock_process, operator_process, batch0, batch1;",
+  "queries": [
+    {"id": "TRANSFER-1", "formula": "A[] reservations <= 1", "description": "The downstream machine is never reserved for two batches", "expected_reserved": true, "expected_naive": false},
+    {"id": "TRANSFER-2", "formula": "A[] destination_owners <= 1", "description": "At most one batch occupies the downstream machine", "expected_reserved": true, "expected_naive": false},
+    {"id": "LIVE-1", "formula": "A[] not deadlock", "description": "The timed model has no deadlock", "expected_reserved": true, "expected_naive": true},
+    {"id": "SANITY-1", "formula": "E<> batch0.Completed", "description": "A batch can complete; reservation safety is not vacuous", "expected_reserved": true, "expected_naive": true},
+    {"id": "SANITY-2", "formula": "E<> operator_process.Stopped", "description": "The STOP scenario is reachable", "expected_reserved": true, "expected_naive": true}
+  ]
+}

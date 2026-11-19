@@ -1,0 +1,66 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "inventory"
+  },
+  "spec": {
+    "replicas": 1,
+    "selector": {
+      "matchLabels": {
+        "app": "inventory"
+      }
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "inventory"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "inventory",
+            "image": "beerfactory-inventory:dev",
+            "ports": [
+              {
+                "containerPort": 8081
+              }
+            ],
+            "env": [
+              {
+                "name": "PORT",
+                "value": "8081"
+              },
+              {
+                "name": "INITIAL_BATCHES",
+                "value": "1000"
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              },
+              "limits": {
+                "memory": "1Gi"
+              }
+            },
+            "readinessProbe": {
+              "tcpSocket": {
+                "port": 8081
+              },
+              "initialDelaySeconds": 5,
+              "periodSeconds": 5
+            }
+          }
+        ],
+        "volumes": [],
+        "terminationGracePeriodSeconds": 30
+      }
+    },
+    "strategy": {
+      "type": "Recreate"
+    }
+  }
+}
