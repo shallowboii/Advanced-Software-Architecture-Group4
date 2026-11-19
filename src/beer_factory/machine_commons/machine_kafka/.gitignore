@@ -1,0 +1,15 @@
+# Build output
+/build/
+*.o
+*.a
+*.so
+*.dylib
+*.dSYM/
+
+# macOS metadata
+.DS_Store
+
+# Editor temporary files
+*~
+*.swp
+*.swo
