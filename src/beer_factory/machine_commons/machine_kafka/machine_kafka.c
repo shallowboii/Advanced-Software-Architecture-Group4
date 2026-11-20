@@ -15,8 +15,8 @@ static void dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
   }
 }
 
-rd_kafka_t *mk_producer_new(const char *brokers) {
-  char errstr[MK_ERRSTR_LEN];
+rd_kafka_t *kafka_producer_new(const char *brokers) {
+  char errstr[KAFKA_ERRSTR_LEN];
   rd_kafka_conf_t *conf = rd_kafka_conf_new();
 
   // TODO: error handling
@@ -30,14 +30,15 @@ rd_kafka_t *mk_producer_new(const char *brokers) {
   rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
 
   /* rd_kafka_new() takes ownership of conf. */
-  rd_kafka_t *rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+  rd_kafka_t *rk =
+      rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
   // TODO: error handling
   return rk;
 }
 
-int mk_send(rd_kafka_t *rk, const char *topic, const mk_message_t *msg) {
+int kafka_send(rd_kafka_t *rk, const char *topic, const kafka_message_t *msg) {
   /* Key = machine id, so one machine's messages stay on one partition. */
-  char key[MK_KEY_LEN];
+  char key[KAFKA_KEY_LEN];
   int key_len = snprintf(key, sizeof(key), "%d", msg->machine_id);
 
   // TODO(marton): payload format (JSON fields); for now the raw struct
@@ -52,28 +53,29 @@ int mk_send(rd_kafka_t *rk, const char *topic, const mk_message_t *msg) {
   return 0;
 }
 
-void mk_producer_close(rd_kafka_t *rk) {
+void kafka_producer_close(rd_kafka_t *rk) {
   /* Wait for the final messages to be delivered or fail. */
-  rd_kafka_flush(rk, MK_FLUSH_TIMEOUT_MS);
+  rd_kafka_flush(rk, KAFKA_FLUSH_TIMEOUT_MS);
   // TODO: error handling (rd_kafka_outq_len() > 0: messages not delivered)
   rd_kafka_destroy(rk);
 }
 
-rd_kafka_t *mk_consumer_new(const char *brokers, const char *group_id,
-                            const char *topic) {
-  char errstr[MK_ERRSTR_LEN];
+rd_kafka_t *kafka_consumer_new(const char *brokers, const char *group_id,
+                               const char *topic) {
+  char errstr[KAFKA_ERRSTR_LEN];
   rd_kafka_conf_t *conf = rd_kafka_conf_new();
 
   // TODO: error handling
   rd_kafka_conf_set(conf, "bootstrap.servers", brokers, errstr,
                     sizeof(errstr));
   rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
-  /* At-least-once: mk_poll commits only after the message was handled. */
+  /* At-least-once: kafka_poll commits only after the message was handled. */
   rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
                     sizeof(errstr));
 
   /* rd_kafka_new() takes ownership of conf. */
-  rd_kafka_t *rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+  rd_kafka_t *rk =
+      rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
   // TODO: error handling
 
   /* All partitions feed the main queue, read by rd_kafka_consumer_poll(). */
@@ -88,14 +90,14 @@ rd_kafka_t *mk_consumer_new(const char *brokers, const char *group_id,
   return rk;
 }
 
-int mk_poll(rd_kafka_t *rk, mk_handler_fn handler, void *opaque) {
-  rd_kafka_message_t *rkm = rd_kafka_consumer_poll(rk, MK_POLL_TIMEOUT_MS);
+int kafka_poll(rd_kafka_t *rk, kafka_handler_fn handler, void *opaque) {
+  rd_kafka_message_t *rkm = rd_kafka_consumer_poll(rk, KAFKA_POLL_TIMEOUT_MS);
   if (!rkm)
     return 0; /* no message within the timeout */
   // TODO: error handling (rkm->err)
 
   // TODO(marton): payload format (JSON fields); for now the raw struct
-  mk_message_t msg;
+  kafka_message_t msg;
   memcpy(&msg, rkm->payload, sizeof(msg));
   handler(&msg, opaque);
 
@@ -107,7 +109,7 @@ int mk_poll(rd_kafka_t *rk, mk_handler_fn handler, void *opaque) {
   return 1;
 }
 
-void mk_consumer_close(rd_kafka_t *rk) {
+void kafka_consumer_close(rd_kafka_t *rk) {
   /* Leave the group, then free everything. */
   rd_kafka_consumer_close(rk);
   rd_kafka_destroy(rk);

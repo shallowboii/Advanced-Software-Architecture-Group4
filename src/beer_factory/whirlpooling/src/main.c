@@ -54,13 +54,13 @@ typedef struct {
   rd_kafka_t *consumer;
   whirlpooling_t whirlpool;
   whirlpooling_batches_t batches;
-  char batch_id[MK_BATCH_LEN]; /* the batch in the vessel */
+  char batch_id[KAFKA_BATCH_LEN]; /* the batch in the vessel */
   uint64_t now;                /* simulated seconds since startup */
 } controller_t;
 
 /* Sends a status about the batch in the vessel. */
-static void send_status(controller_t *c, mk_type_t type) {
-  mk_message_t status;
+static void send_status(controller_t *c, kafka_type_t type) {
+  kafka_message_t status;
   memset(&status, 0, sizeof(status));
   status.type = type;
   snprintf(status.machine_type, sizeof(status.machine_type), "%s",
@@ -68,27 +68,27 @@ static void send_status(controller_t *c, mk_type_t type) {
   status.machine_id = c->id;
   memcpy(status.batch_id, c->batch_id, sizeof(status.batch_id));
   // TODO(marton): message_id and ts_utc
-  mk_send(c->producer, TOPIC, &status);
+  kafka_send(c->producer, TOPIC, &status);
 }
 
-static void on_message(const mk_message_t *msg, void *opaque) {
+static void on_message(const kafka_message_t *msg, void *opaque) {
   controller_t *c = opaque;
   if (msg->machine_id != c->id)
     return; /* for another whirlpool */
 
   switch (msg->type) {
-  case MK_START:
+  case KAFKA_START:
     // TODO(marton): what to answer when the whirlpool is busy
     // TODO(marton): start params (duration_s); the default run time is used
     c->batches.hot_wort_batches = 1; /* the kettle pumped the hot wort over */
     whirlpooling_start(&c->whirlpool, c->now);
     memcpy(c->batch_id, msg->batch_id, sizeof(c->batch_id));
     printf("Whirlpooling %s.\n", c->batch_id);
-    send_status(c, MK_RUNNING);
+    send_status(c, KAFKA_RUNNING);
     break;
-  case MK_STOP:
-  case MK_FLUSH:
-    // TODO(marton): handle MK_STOP / MK_FLUSH (or answer UNSUPPORTED)
+  case KAFKA_STOP:
+  case KAFKA_FLUSH:
+    // TODO(marton): handle KAFKA_STOP / KAFKA_FLUSH (or answer UNSUPPORTED)
     break;
   default:
     break; /* a status (also our own): only the scheduler handles those */
@@ -98,8 +98,8 @@ static void on_message(const mk_message_t *msg, void *opaque) {
 static void finish_batch(controller_t *c) {
   printf("Whirlpooled %s.\n", c->batch_id);
   c->batches.clarified_wort_batches = 0; /* pumped to a tank */
-  // TODO(marton): there is no MK_DONE; should this MK_IDLE carry batch_id?
-  send_status(c, MK_IDLE);
+  // TODO(marton): no KAFKA_DONE; should this KAFKA_IDLE carry batch_id?
+  send_status(c, KAFKA_IDLE);
 }
 
 /* ---- MQTT heartbeat (optional) ------------------------------------------- */
@@ -289,17 +289,17 @@ int main(int argc, char **argv) {
    * and keeps only the commands for its own id. */
   char group_id[GROUP_ID_LEN];
   snprintf(group_id, sizeof(group_id), "%s-%d", MACHINE_TYPE, c.id);
-  c.producer = mk_producer_new(brokers);
-  c.consumer = mk_consumer_new(brokers, group_id, TOPIC);
+  c.producer = kafka_producer_new(brokers);
+  c.consumer = kafka_consumer_new(brokers, group_id, TOPIC);
   // TODO: error handling
-  // TODO(marton): send MK_IDLE on startup? (only once partitions are assigned)
+  // TODO(marton): send KAFKA_IDLE on startup? (once partitions are assigned)
   printf("Whirlpooling %d: Kafka %s, topic %s, time x%g.\n", c.id, brokers,
          TOPIC, time_scale);
 
   heartbeat_link_t hb;
   if (heartbeat_open(&hb, name) != 0) {
-    mk_consumer_close(c.consumer);
-    mk_producer_close(c.producer);
+    kafka_consumer_close(c.consumer);
+    kafka_producer_close(c.producer);
     return EXIT_FAILURE;
   }
 
@@ -309,9 +309,9 @@ int main(int argc, char **argv) {
     uint64_t elapsed_ms = elapsed_ms_since(&started);
     c.now = (uint64_t)((double)elapsed_ms * time_scale / 1000.0);
 
-    /* Waits up to MK_POLL_TIMEOUT_MS for a command; this is the loop's
+    /* Waits up to KAFKA_POLL_TIMEOUT_MS for a command; this is the loop's
      * sleep. */
-    mk_poll(c.consumer, on_message, &c);
+    kafka_poll(c.consumer, on_message, &c);
     rd_kafka_poll(c.producer, 0); /* serve delivery reports */
 
     if (whirlpooling_update(&c.whirlpool, c.now) == WHIRLPOOLING_DONE)
@@ -321,7 +321,7 @@ int main(int argc, char **argv) {
   }
 
   heartbeat_close(&hb);
-  mk_consumer_close(c.consumer);
-  mk_producer_close(c.producer);
+  kafka_consumer_close(c.consumer);
+  kafka_producer_close(c.producer);
   return EXIT_SUCCESS;
 }
