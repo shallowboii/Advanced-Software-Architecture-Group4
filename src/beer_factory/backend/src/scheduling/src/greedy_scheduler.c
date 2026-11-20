@@ -4,7 +4,8 @@
  * Build:
  *   gcc -Wall -O2 -o brewery brewery_scheduler.c machine_kafka.c structure.c \
  *       mashing.c lautering.c boiling.c whirlpooling.c fermentation.c \
- *       filtering.c -lrdkafka -lhiredis
+ *       filtering.c heartbeat.c mqtt.c mqtt_pal.c \
+ *       -lrdkafka -lhiredis -lpthread
  * Run:
  *   ./brewery [number_of_batches]
  */
@@ -12,9 +13,14 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <sys/socket.h>
 #include "structure.h"
 #include "redis_conn.h"
 #include "machine_kafka.h"
+#include "heartbeat.h"
 
 #define MAX_BATCHES      64
 #define DEFAULT_BATCHES  6
@@ -28,6 +34,15 @@
 #define SECONDS_PER_SIM_HOUR 1    /* time scale: 1 sim hour = 1 real second */
 #define WARMUP_S             5    /* let the consumer join its group first */
 #define RUN_TIMEOUT_S        3600 /* give up if machines never finish */
+
+//Heartbeats from the machines over MQTT
+#define MQTT_HOST            "localhost"
+#define MQTT_PORT            "1883"
+#define MQTT_CLIENT_ID       "brewery-scheduler-hb"
+#define HEARTBEAT_TOPIC      "heartbeat"  /* same topic heartbeat_send uses */
+#define HEARTBEAT_TIMEOUT_S  30   /* machine is "silent" after this long */
+#define MAX_HEARTBEATS       64   /* distinct machine names we can track */
+#define MQTT_BUF_SIZE        2048
 
 static void *machines[NUM_STEPS][MAX_MACHINES];  
 
@@ -90,7 +105,7 @@ static void redis_reset(redisContext *c)
 {
     redisReply *r = redisCommand(c,
         "DEL brewery:last_started brewery:last_done_type brewery:done_count "
-        "brewery:batch_tank brewery:last_error");
+        "brewery:batch_tank brewery:last_error brewery:heartbeat");
     redis_check(c, r, "DEL");
 }
 
@@ -150,6 +165,135 @@ static void utc_now(char *buf, size_t len)
     struct tm tm;
     gmtime_r(&t, &tm);
     strftime(buf, len, "%Y-%m-%dT%H:%M:%SZ", &tm);
+}
+
+/* Last heartbeat seen from each machine, keyed by the name it sends. */
+typedef struct {
+    char   name[MAX_MACHINE_NAME_LEN];
+    time_t last_seen;         /* local receive time, not the machine's clock */
+    int    silent;            /* already reported as silent */
+} HbEntry;
+
+static HbEntry            hb_tab[MAX_HEARTBEATS];
+static int                hb_n;
+static struct mqtt_client hb_client;
+static int                hb_fd = -1;                /* -1 = MQTT not running */
+static uint8_t            hb_send_buf[MQTT_BUF_SIZE];
+static uint8_t            hb_recv_buf[MQTT_BUF_SIZE];
+
+/* Called by mqtt_sync for every message on the heartbeat topic. */
+static void on_heartbeat(void **state, struct mqtt_response_publish *p)
+{
+    (void)state;
+
+    /* The sender publishes the raw struct, so the size must match exactly. */
+    if (p->application_message_size != sizeof(machine_heartbeat_t)) {
+        fprintf(stderr, "MQTT: heartbeat of %zu bytes ignored (expected %zu)\n",
+                p->application_message_size, sizeof(machine_heartbeat_t));
+        return;
+    }
+
+    machine_heartbeat_t hb;
+    memcpy(&hb, p->application_message, sizeof hb);
+    hb.machine_name[MAX_MACHINE_NAME_LEN - 1] = '\0';
+
+    HbEntry *e = NULL;
+    for (int i = 0; i < hb_n; i++)
+        if (!strcmp(hb_tab[i].name, hb.machine_name)) { e = &hb_tab[i]; break; }
+
+    if (!e) {
+        if (hb_n >= MAX_HEARTBEATS) return;
+        e = &hb_tab[hb_n++];
+        snprintf(e->name, sizeof e->name, "%s", hb.machine_name);
+        printf("h%4d: heartbeat: first one from %s\n", sim_hour(), e->name);
+    } else if (e->silent) {
+        printf("h%4d: heartbeat: %s is back\n", sim_hour(), e->name);
+    }
+    e->last_seen = time(NULL);
+    e->silent = 0;
+
+    redisReply *r = redisCommand(rc, "HSET brewery:heartbeat %s %lld",
+                                 e->name, (long long)e->last_seen);
+    redis_check(rc, r, "HSET heartbeat");
+}
+
+/* Connected, non-blocking TCP socket to host:port, or -1. */
+static int open_nonblocking_socket(const char *host, const char *port)
+{
+    struct addrinfo hints = {0}, *res, *ai;
+    int fd = -1;
+
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    if (getaddrinfo(host, port, &hints, &res) != 0) return -1;
+
+    for (ai = res; ai; ai = ai->ai_next) {
+        fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+        if (fd < 0) continue;
+        if (connect(fd, ai->ai_addr, ai->ai_addrlen) == 0) break;
+        close(fd);
+        fd = -1;
+    }
+    freeaddrinfo(res);
+
+    if (fd >= 0) fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+    return fd;
+}
+
+static void hb_stop(int graceful)
+{
+    if (hb_fd < 0) return;
+    if (graceful) {
+        mqtt_disconnect(&hb_client);
+        mqtt_sync(&hb_client);                 /* push the DISCONNECT out */
+    }
+    close(hb_fd);
+    hb_fd = -1;
+}
+
+/* Connect to the broker and subscribe. Returns 0 on success, -1 otherwise. */
+static int hb_start(void)
+{
+    hb_fd = open_nonblocking_socket(MQTT_HOST, MQTT_PORT);
+    if (hb_fd < 0) return -1;
+
+    enum MQTTErrors e = mqtt_init(&hb_client, hb_fd,
+                                  hb_send_buf, sizeof hb_send_buf,
+                                  hb_recv_buf, sizeof hb_recv_buf,
+                                  on_heartbeat);
+    if (e == MQTT_OK)
+        e = mqtt_connect(&hb_client, MQTT_CLIENT_ID, NULL, NULL, 0, NULL, NULL,
+                         MQTT_CONNECT_CLEAN_SESSION, 60);
+    if (e == MQTT_OK)
+        e = mqtt_subscribe(&hb_client, HEARTBEAT_TOPIC, 0);
+    if (e != MQTT_OK) {
+        fprintf(stderr, "MQTT: %s\n", mqtt_error_str(e));
+        hb_stop(0);
+        return -1;
+    }
+    return 0;
+}
+
+/* Non-blocking: send/receive pending MQTT traffic and flag silent machines.
+ * Call often (every main loop iteration). */
+static void hb_poll(void)
+{
+    if (hb_fd < 0) return;
+
+    enum MQTTErrors e = mqtt_sync(&hb_client);
+    if (e != MQTT_OK) {
+        fprintf(stderr, "MQTT: %s, heartbeats disabled\n", mqtt_error_str(e));
+        hb_stop(0);
+        return;
+    }
+
+    time_t now = time(NULL);
+    for (int i = 0; i < hb_n; i++)
+        if (!hb_tab[i].silent && now - hb_tab[i].last_seen > HEARTBEAT_TIMEOUT_S) {
+            hb_tab[i].silent = 1;
+            fprintf(stderr, "h%4d: heartbeat: %s silent for over %d s\n",
+                    sim_hour(), hb_tab[i].name, HEARTBEAT_TIMEOUT_S);
+        }
 }
 
 /* A tank with no batch reserved on it, or -1 when every tank is taken. */
@@ -465,9 +609,15 @@ int main(int argc, char **argv)
     /* Joining a consumer group takes a few seconds. Poll before the first
      * dispatch so an early RUNNING reply is not missed. current[][] is all
      * -1 here, so on_status ignores everything received during warm-up. */
+    /* Heartbeats are monitoring only: if MQTT is down, run without them. */
+    if (hb_start() < 0)
+        fprintf(stderr, "MQTT unavailable, running without heartbeats\n");
+
     time_t warm = time(NULL);
-    while (time(NULL) - warm < WARMUP_S)
+    while (time(NULL) - warm < WARMUP_S) {
         mk_poll(cons, on_status, NULL);
+        hb_poll();
+    }
 
     /* ---- run the schedule, driven by machine statuses ---- */
     t0 = time(NULL);
@@ -484,6 +634,7 @@ int main(int argc, char **argv)
 
         /* 2. Wait for a status message (blocks up to MK_POLL_TIMEOUT_MS) */
         mk_poll(cons, on_status, NULL);
+        hb_poll();
     }
 
     int nfailed = 0;
@@ -495,6 +646,7 @@ int main(int argc, char **argv)
     printf("\nPlanned makespan: %d hours, actual: %d hours, failed batches: %d\n",
            planned_makespan, sim_hour(), nfailed);
 
+    hb_stop(1);
     mk_consumer_close(cons);
     mk_producer_close(prod);
 
