@@ -6,7 +6,7 @@ This is the whirlpooling machine in C, made from the Whirlpooling template in th
 
 `whirlpooling.c` / `whirlpooling.h` are done the same way as boiling: a state machine that follows the UPPAAL model, works in seconds and returns result codes. It waits for hot wort, takes one batch, whirlpools it for 1 hour, then makes one clarified wort batch and goes back to waiting. Same states, guards and updates as in UPPAAL.
 
-`src/main.c` is the controller and the reference machine for `machine_kafka`. It takes commands over Kafka, drives the state machine and, if `MQTT_HOST` is set, sends an MQTT heartbeat every 2 seconds (`machine_mqtt`).
+`src/main.c` is the controller and the reference machine for `machine_kafka`. It takes commands over Kafka, drives the state machine and sends an MQTT heartbeat (`machine_mqtt`). If MQTT can't start, it prints a warning and keeps running.
 
 ## Files
 
@@ -15,7 +15,7 @@ This is the whirlpooling machine in C, made from the Whirlpooling template in th
 | `src/whirlpooling.c`, `src/whirlpooling.h` | the machine (boiling style) |
 | `tests/test_whirlpooling.c` | tests for the machine |
 | `examples/demo.c` | runs one batch and prints what happens |
-| `src/main.c` | the controller: Kafka (`machine_kafka`) (+ optional MQTT heartbeat) |
+| `src/main.c` | the controller: Kafka (`machine_kafka`) + MQTT heartbeat (`machine_mqtt`) |
 
 ## How to run it
 
@@ -57,16 +57,17 @@ Topic `machine.whirlpooling`, key = machine id. The machine handles only command
 The controller needs librdkafka and MQTT-C, so on Windows run it in Linux (WSL or a container):
 
 ```bash
-TIME_SCALE=600 make run   # 1 h run = 6 s
+TIME_SCALE=600 make run MQTT_C_DIR=/opt/MQTT-C   # 1 h run = 6 s
 ```
+
+`MQTT_C_DIR` points to an MQTT-C checkout; leave it out to link an installed `-lmqttc`. For a full test with a Kafka broker and a start command, see the "Test" section in `../machine_commons/machine_kafka/README.md`.
 
 | Environment | Default | Meaning |
 | --- | --- | --- |
 | `KAFKA_BROKERS` | (required) | Kafka servers, e.g. `kafka:29092` |
 | `MACHINE_ID` | number in the machine name | Kafka `machine_id` |
-| `MQTT_HOST`, `MQTT_PORT` | unset, 1883 | heartbeat broker; unset = no heartbeat |
 | `TIME_SCALE` | 1 | simulated seconds per real second |
 
-Argument: `whirlpooling [machine-name]`, default `whirlpooling-1`.
+The MQTT heartbeat broker is fixed to `localhost:1883` in `heartbeat.c`.
 
-The Dockerfile still builds the demo (`make all`), since it is the template for the other machines.
+Argument: `whirlpooling [machine-name]`, default `whirlpooling-1`.
