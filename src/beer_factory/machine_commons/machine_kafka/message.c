@@ -1,5 +1,4 @@
 #include "machine_kafka.h"
-#include "trace.h"
 
 #include <cjson/cJSON.h>
 #include <limits.h>
@@ -106,7 +105,7 @@ static const char *check_params(const mk_message_t *m) {
 
 /* Rules shared by encode and decode; message_id is checked separately because
  * mk_send fills it in before encoding. Returns NULL if valid, otherwise what
- * is wrong (shown in the MK_TRACE output). */
+ * is wrong. */
 static const char *check_body(const mk_message_t *m) {
   if (!valid_type(m->type))
     return "unknown type";
@@ -144,16 +143,6 @@ static const char *check_body(const mk_message_t *m) {
   return "unknown type";
 }
 
-/* Traces why a message could not be built or encoded. */
-static void trace_invalid(const char *event, const mk_message_t *m,
-                          const char *reason) {
-  if (!mk_trace_enabled())
-    return;
-  char summary[MK_TRACE_MSG_LEN];
-  mk_trace_write("-", event, "reason=\"%s\" %s", reason,
-                 mk_trace_msg(m, summary, sizeof(summary)));
-}
-
 static mk_result_t make_base(mk_message_t *out, mk_type_t type,
                              const char *machine_type, int machine_id) {
   memset(out, 0, sizeof(*out));
@@ -171,15 +160,11 @@ mk_result_t mk_make_command(mk_message_t *out, mk_type_t type,
     return MK_ERR_ARG;
   mk_message_t m;
   if (make_base(&m, type, machine_type, machine_id) != MK_OK ||
-      !copy_str(m.batch_id, sizeof(m.batch_id), batch_id)) {
-    trace_invalid("make.fail", &m, "string too long");
+      !copy_str(m.batch_id, sizeof(m.batch_id), batch_id))
     return MK_ERR_ARG;
-  }
   const char *why = check_body(&m);
-  if (why != NULL) {
-    trace_invalid("make.fail", &m, why);
+  if (why != NULL)
     return MK_ERR_ARG;
-  }
   *out = m;
   return MK_OK;
 }
@@ -192,21 +177,12 @@ mk_result_t mk_make_start(mk_message_t *out, const char *machine_type,
 mk_result_t mk_param_set(mk_message_t *msg, const char *name, double value) {
   if (msg == NULL || name == NULL || msg->type != MK_START ||
       name[0] == '\0' || strlen(name) >= MK_NAME_LEN || !valid_ident(name) ||
-      !isfinite(value) || msg->n_params > MK_MAX_PARAMS) {
-    MK_TRACE("-", "param.fail", "name=%s value=%g reason=\"%s\"",
-             name != NULL ? name : "(null)", value,
-             msg == NULL || msg->type != MK_START ? "not a start"
-             : !isfinite(value)                   ? "value not finite"
-                                                  : "invalid name");
+      !isfinite(value) || msg->n_params > MK_MAX_PARAMS)
     return MK_ERR_ARG;
-  }
   int i = find_param(msg, name);
   if (i < 0) {
-    if (msg->n_params == MK_MAX_PARAMS) {
-      MK_TRACE("-", "param.fail", "name=%s reason=\"already %d params\"",
-               name, MK_MAX_PARAMS);
+    if (msg->n_params == MK_MAX_PARAMS)
       return MK_ERR_ARG;
-    }
     i = (int)msg->n_params++;
     memcpy(msg->params[i].name, name, strlen(name) + 1);
   }
@@ -233,10 +209,8 @@ mk_result_t mk_make_idle(mk_message_t *out, const char *machine_type,
   const char *why = make_base(&m, MK_IDLE, machine_type, machine_id) != MK_OK
                         ? "machine_type too long"
                         : check_body(&m);
-  if (why != NULL) {
-    trace_invalid("make.fail", &m, why);
+  if (why != NULL)
     return MK_ERR_ARG;
-  }
   *out = m;
   return MK_OK;
 }
@@ -244,10 +218,8 @@ mk_result_t mk_make_idle(mk_message_t *out, const char *machine_type,
 /* Status answering command: same machine and batch. */
 static mk_result_t make_reply(mk_message_t *out, const mk_message_t *command,
                               mk_type_t type) {
-  if (out == NULL || command == NULL || !mk_is_command(command->type)) {
-    trace_invalid("make.fail", command, "a status can only answer a command");
+  if (out == NULL || command == NULL || !mk_is_command(command->type))
     return MK_ERR_ARG;
-  }
   mk_message_t reply;
   memset(&reply, 0, sizeof(reply));
   reply.type = type;
@@ -284,10 +256,8 @@ mk_result_t mk_make_error(mk_message_t *out, const mk_message_t *command,
               !copy_str(reply.error_reason, sizeof(reply.error_reason), reason)
           ? "error code or reason too long"
           : check_body(&reply);
-  if (why != NULL) {
-    trace_invalid("make.fail", &reply, why);
+  if (why != NULL)
     return MK_ERR_ARG;
-  }
   *out = reply;
   return MK_OK;
 }
@@ -318,10 +288,8 @@ int mk_encode(const mk_message_t *msg, char *buf, size_t buf_len) {
     return MK_ERR_ARG;
   const char *why = msg->message_id[0] == '\0' ? "message_id is empty"
                                                 : check_body(msg);
-  if (why != NULL) {
-    trace_invalid("encode.fail", msg, why);
+  if (why != NULL)
     return MK_ERR_ENCODE;
-  }
 
   cJSON *root = cJSON_CreateObject();
   int ok = root != NULL &&
@@ -348,8 +316,6 @@ int mk_encode(const mk_message_t *msg, char *buf, size_t buf_len) {
   if (ok && buf_len <= INT_MAX &&
       cJSON_PrintPreallocated(root, buf, (int)buf_len, 0))
     written = (int)strlen(buf);
-  else
-    trace_invalid("encode.fail", msg, "buffer too small or out of memory");
   cJSON_Delete(root);
   return written;
 }
@@ -458,14 +424,8 @@ mk_result_t mk_decode(const char *json, size_t len, mk_message_t *out) {
     why = "message_id is empty";
   if (why == NULL)
     why = check_body(&m);
-  if (why != NULL) {
-    if (mk_trace_enabled()) {
-      int shown = len > 300 ? 300 : (int)len;
-      mk_trace_write("-", "decode.fail", "reason=\"%s\" payload=%.*s%s", why,
-                     shown, json, len > 300 ? "..." : "");
-    }
+  if (why != NULL)
     return MK_ERR_DECODE;
-  }
   *out = m;
   return MK_OK;
 }

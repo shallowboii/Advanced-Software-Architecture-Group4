@@ -120,7 +120,7 @@ static void test_invalid_arguments(void) {
   CHECK(whirlpooling_update(NULL, 0) == WHIRLPOOLING_INVALID_ARGUMENT);
 }
 
-static void test_recipe_duration(void) {
+static void test_duration(void) {
   whirlpooling_batches_t batches = {1, 0};
   whirlpooling_t w;
 
@@ -171,7 +171,7 @@ int main(void) {
   test_late_update_and_next_batch();
   test_invalid_time_does_not_change_state();
   test_invalid_arguments();
-  test_recipe_duration();
+  test_duration();
   test_stop_and_flush();
   puts("whirlpooling: all core tests passed");
   return EXIT_SUCCESS;

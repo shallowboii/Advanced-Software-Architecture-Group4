@@ -1,7 +1,6 @@
 #define _POSIX_C_SOURCE 200809L /* gmtime_r */
 
 #include "machine_kafka.h"
-#include "trace.h"
 
 #include <librdkafka/rdkafka.h>
 #include <stdint.h>
@@ -18,7 +17,6 @@
 #define MK_OFFSET_QUERY_MS 10000
 
 struct mk_bus {
-  char name[MK_ID_LEN]; /* client_id, for trace output */
   rd_kafka_t *producer;
   rd_kafka_t *consumer; /* NULL when no topics are consumed */
   /* Leaves room for "-" + 20 digits of the sequence number in message_id. */
@@ -63,18 +61,6 @@ static void delivery_cb(rd_kafka_t *rk, const rd_kafka_message_t *msg,
                         void *opaque) {
   (void)rk;
   mk_bus_t *bus = opaque;
-  if (mk_trace_enabled()) {
-    mk_message_t sent;
-    int decoded = msg->payload != NULL &&
-                  mk_decode(msg->payload, msg->len, &sent) == MK_OK;
-    mk_trace_write(bus->name, msg->err ? "delivery.fail" : "delivery.ok",
-                   "topic=%s part=%d off=%lld id=%s%s%s%s",
-                   rd_kafka_topic_name(msg->rkt), (int)msg->partition,
-                   (long long)msg->offset, decoded ? sent.message_id : "?",
-                   msg->err ? " reason=\"" : "",
-                   msg->err ? rd_kafka_err2str(msg->err) : "",
-                   msg->err ? "\"" : "");
-  }
   if (!msg->err)
     return;
   ++bus->delivery_failures;
@@ -105,17 +91,10 @@ static void fix_start_offsets(mk_bus_t *bus, rd_kafka_t *rk,
   }
   for (int i = 0; i < parts->cnt; ++i) {
     rd_kafka_topic_partition_t *p = &parts->elems[i];
-    if (p->offset >= 0) {
-      MK_TRACE(bus->name, "assign.offset",
-               "topic=%s part=%d start=%lld why=committed", p->topic,
-               (int)p->partition, (long long)p->offset);
+    if (p->offset >= 0)
       continue; /* resume after the last commit */
-    }
     if (!bus->reset_latest) {
       p->offset = RD_KAFKA_OFFSET_BEGINNING;
-      MK_TRACE(bus->name, "assign.offset",
-               "topic=%s part=%d start=beginning why=\"no commit, earliest\"",
-               p->topic, (int)p->partition);
       continue;
     }
     int64_t low = 0, high = 0;
@@ -128,9 +107,6 @@ static void fix_start_offsets(mk_bus_t *bus, rd_kafka_t *rk,
     } else {
       p->offset = high;
     }
-    MK_TRACE(bus->name, "assign.offset",
-             "topic=%s part=%d start=%lld why=\"no commit, latest = end\"",
-             p->topic, (int)p->partition, (long long)p->offset);
   }
 }
 
@@ -139,30 +115,19 @@ static void rebalance_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err,
                          void *opaque) {
   mk_bus_t *bus = opaque;
   if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
-    MK_TRACE(bus->name, "rebalance.assign", "partitions=%d", parts->cnt);
     fix_start_offsets(bus, rk, parts);
     rd_kafka_assign(rk, parts);
     bus->ready = parts->cnt > 0;
   } else {
-    MK_TRACE(bus->name, "rebalance.revoke", "partitions=%d reason=\"%s\"",
-             parts->cnt, rd_kafka_err2str(err));
     rd_kafka_assign(rk, NULL);
     bus->ready = 0;
   }
-  MK_TRACE(bus->name, "ready", "value=%d", bus->ready);
 }
 
 static rd_kafka_conf_t *base_conf(mk_bus_t *bus, const mk_config_t *config) {
   rd_kafka_conf_t *conf = rd_kafka_conf_new();
   if (!set(conf, "bootstrap.servers", config->brokers) ||
       !set(conf, "client.id", config->client_id)) {
-    rd_kafka_conf_destroy(conf);
-    return NULL;
-  }
-  /* MK_KAFKA_DEBUG=cgrp,topic,msg (or "all") turns on librdkafka's own
-   * debug log, printed to stderr as "%7|...". */
-  const char *debug = getenv("MK_KAFKA_DEBUG");
-  if (debug != NULL && debug[0] != '\0' && !set(conf, "debug", debug)) {
     rd_kafka_conf_destroy(conf);
     return NULL;
   }
@@ -284,27 +249,6 @@ mk_bus_t *mk_open(const mk_config_t *config) {
                                : config->command_max_age_s;
   bus->on_delivery_failure = config->on_delivery_failure;
   bus->delivery_user = config->delivery_user;
-  snprintf(bus->name, sizeof(bus->name), "%s", config->client_id);
-  if (mk_trace_enabled()) {
-    char topics[512] = "";
-    size_t pos = 0;
-    for (size_t i = 0; i < config->n_topics && pos < sizeof(topics); ++i) {
-      int n = snprintf(topics + pos, sizeof(topics) - pos, "%s%s",
-                       i > 0 ? "," : "", config->topics[i]);
-      pos += n > 0 ? (size_t)n : 0;
-    }
-    mk_trace_write(bus->name, "open",
-                   "brokers=%s group=%s topics=%s receive=%s reset=%s "
-                   "max_age_s=%d delivery_cb=%s",
-                   config->brokers,
-                   config->group_id ? config->group_id : config->client_id,
-                   config->n_topics > 0 ? topics : "(none)",
-                   bus->receive == MK_RECEIVE_COMMANDS ? "commands"
-                                                       : "statuses",
-                   bus->reset_latest ? "latest" : "earliest",
-                   bus->command_max_age_s,
-                   config->on_delivery_failure ? "yes" : "no");
-  }
 
   /* message_id = <client_id>-<start time>-<seq>. The start time keeps ids
    * unique across restarts of the same machine. */
@@ -400,11 +344,8 @@ mk_result_t mk_send(mk_bus_t *bus, mk_message_t *msg) {
 
   char payload[MK_MAX_JSON_LEN];
   int len = mk_encode(&out, payload, sizeof(payload));
-  if (len < 0) {
-    MK_TRACE(bus->name, "send.fail", "result=\"%s\" (see encode.fail above)",
-             mk_result_name(len));
+  if (len < 0)
     return (mk_result_t)len;
-  }
 
   const char *topic = out.machine_type; /* checked by mk_encode */
   char key[16];
@@ -442,11 +383,6 @@ mk_result_t mk_send(mk_bus_t *bus, mk_message_t *msg) {
     return result;
   }
 
-  if (mk_trace_enabled()) {
-    char summary[MK_TRACE_MSG_LEN];
-    mk_trace_write(bus->name, "send", "topic=%s key=%s bytes=%d %s", topic,
-                   key, len, mk_trace_msg(&out, summary, sizeof(summary)));
-  }
   rd_kafka_poll(bus->producer, 0); /* serve delivery reports */
   *msg = out;
   return MK_OK;
@@ -480,57 +416,23 @@ int mk_poll(mk_bus_t *bus, int timeout_ms, mk_handler_fn handler, void *user) {
     }
 
     const char *topic = rd_kafka_topic_name(rkm->rkt);
-    MK_TRACE(bus->name, "recv", "topic=%s part=%d off=%lld key=%.*s bytes=%zu",
-             topic, (int)rkm->partition, (long long)rkm->offset,
-             (int)(rkm->key_len < 32 ? rkm->key_len : 32),
-             rkm->key != NULL ? (const char *)rkm->key : "", rkm->len);
     mk_message_t msg;
     long long age = 0;
     if (rkm->payload == NULL ||
         mk_decode(rkm->payload, rkm->len, &msg) != MK_OK) {
       fprintf(stderr, "kafka: skipping malformed message %s[%d]@%lld\n",
               topic, (int)rkm->partition, (long long)rkm->offset);
-      MK_TRACE(bus->name, "skip", "off=%lld why=malformed (see decode.fail)",
-               (long long)rkm->offset);
     } else if (!on_right_topic(&msg, topic)) {
       fprintf(stderr, "kafka: skipping malformed message %s[%d]@%lld\n",
               topic, (int)rkm->partition, (long long)rkm->offset);
-      if (mk_trace_enabled()) {
-        char summary[MK_TRACE_MSG_LEN];
-        mk_trace_write(bus->name, "skip",
-                       "off=%lld why=wrong_topic expected=%s %s",
-                       (long long)rkm->offset, msg.machine_type,
-                       mk_trace_msg(&msg, summary, sizeof(summary)));
-      }
     } else if (!for_me(bus, &msg)) {
-      MK_TRACE(bus->name, "skip", "off=%lld why=other_direction type=%s id=%s",
-               (long long)rkm->offset, mk_type_name(msg.type), msg.message_id);
+      /* the other direction (e.g. a machine's own statuses): skip */
     } else if (expired(bus, &msg, &age)) {
       fprintf(stderr, "kafka: skipping expired %s %s (sent %s)\n",
               mk_type_name(msg.type), msg.message_id, msg.ts_utc);
-      MK_TRACE(bus->name, "skip",
-               "off=%lld why=expired age_s=%lld max_age_s=%d id=%s",
-               (long long)rkm->offset, age, bus->command_max_age_s,
-               msg.message_id);
     } else {
-      struct timespec t0, t1;
-      int tracing = mk_trace_enabled();
-      if (tracing) {
-        char summary[MK_TRACE_MSG_LEN];
-        mk_trace_write(bus->name, "handler.call", "off=%lld %s",
-                       (long long)rkm->offset,
-                       mk_trace_msg(&msg, summary, sizeof(summary)));
-        clock_gettime(CLOCK_MONOTONIC, &t0);
-      }
       handler(&msg, user);
       ++handled;
-      if (tracing) {
-        clock_gettime(CLOCK_MONOTONIC, &t1);
-        mk_trace_write(bus->name, "handler.return", "off=%lld took_ms=%.3f",
-                       (long long)rkm->offset,
-                       (double)(t1.tv_sec - t0.tv_sec) * 1e3 +
-                           (double)(t1.tv_nsec - t0.tv_nsec) / 1e6);
-      }
     }
 
     /* Commit after handling: a crash before this line redelivers the
@@ -539,9 +441,6 @@ int mk_poll(mk_bus_t *bus, int timeout_ms, mk_handler_fn handler, void *user) {
     rd_kafka_resp_err_t err = rd_kafka_commit_message(bus->consumer, rkm, 0);
     if (err)
       fprintf(stderr, "kafka commit: %s\n", rd_kafka_err2str(err));
-    MK_TRACE(bus->name, "commit", "topic=%s part=%d next_off=%lld result=\"%s\"",
-             topic, (int)rkm->partition, (long long)rkm->offset + 1,
-             err ? rd_kafka_err2str(err) : "ok");
     rd_kafka_message_destroy(rkm);
   }
 
@@ -568,8 +467,6 @@ int mk_close(mk_bus_t *bus, int timeout_ms) {
   int left = rd_kafka_outq_len(bus->producer);
   if (left > 0)
     fprintf(stderr, "kafka: %d message(s) not delivered before close\n", left);
-  MK_TRACE(bus->name, "close", "undelivered=%d delivery_failures=%lu", left,
-           bus->delivery_failures);
   rd_kafka_destroy(bus->producer);
   free(bus);
   return left;

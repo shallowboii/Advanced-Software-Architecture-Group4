@@ -34,7 +34,7 @@
 #define MK_TS_LEN 32      /* ts_utc, e.g. 2026-11-18T12:00:00Z */
 #define MK_PATH_LEN 256   /* ledger file path */
 
-/* Recipe parameters carried by a start (name -> number). */
+/* Parameters carried by a start (name -> number), e.g. duration_s. */
 #define MK_MAX_PARAMS 16
 
 /* Largest encoded message. Identifiers are restricted to characters that JSON
@@ -124,7 +124,7 @@ mk_result_t mk_make_command(mk_message_t *out, mk_type_t type,
                             const char *machine_type, int machine_id,
                             const char *batch_id);
 
-/* Start of batch_id on machine_type/machine_id. Add recipe parameters with
+/* Start of batch_id on machine_type/machine_id. Add parameters with
  * mk_param_set. */
 mk_result_t mk_make_start(mk_message_t *out, const char *machine_type,
                           int machine_id, const char *batch_id);

@@ -15,7 +15,7 @@
  * Time is absolute, in seconds, and is passed in by the caller.
  */
 
-/* T_WHIRLPOOLING = 1 h (FR-10.4); a recipe can set another run time
+/* T_WHIRLPOOLING = 1 h (FR-10.4); a start can set another run time
  * (whirlpooling_set_duration). */
 #define WHIRLPOOLING_DURATION_SECONDS 3600
 
@@ -59,7 +59,7 @@ typedef struct {
 whirlpooling_result_t whirlpooling_init(whirlpooling_t *whirlpooling,
                                         whirlpooling_batches_t *batches);
 
-/* Run time of the next batch (recipe parameter). Only while WAIT. */
+/* Run time of the next batch (start parameter duration_s). Only while WAIT. */
 whirlpooling_result_t whirlpooling_set_duration(whirlpooling_t *whirlpooling,
                                                 uint64_t seconds);
 

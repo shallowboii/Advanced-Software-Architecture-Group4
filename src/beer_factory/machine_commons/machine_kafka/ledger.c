@@ -1,7 +1,6 @@
 #define _POSIX_C_SOURCE 200809L /* fsync, fileno */
 
 #include "machine_kafka.h"
-#include "trace.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -35,20 +34,6 @@ static int copy_str(char *dst, size_t dst_len, const char *src) {
   memcpy(dst, src, len + 1);
   return 1;
 }
-
-/* Trace label of a ledger: "ledger:boiling#3". */
-static const char *who(const mk_ledger_t *ledger, char *buf, size_t len) {
-  snprintf(buf, len, "ledger:%s#%d", ledger->machine_type, ledger->machine_id);
-  return buf;
-}
-
-#define LEDGER_TRACE(ledger, event, ...)                                       \
-  do {                                                                         \
-    if (mk_trace_enabled()) {                                                  \
-      char who_[MK_NAME_LEN + 32];                                             \
-      mk_trace_write(who((ledger), who_, sizeof(who_)), (event), __VA_ARGS__); \
-    }                                                                          \
-  } while (0)
 
 static char state_char(const mk_ledger_entry_t *e) {
   if (e->refused)
@@ -126,8 +111,6 @@ static mk_result_t save(const mk_ledger_t *ledger) {
     return MK_ERR_IO;
   }
   fsync_dir(ledger->path);
-  LEDGER_TRACE(ledger, "ledger.save", "path=%s entries=%zu", ledger->path,
-               ledger->count);
   return MK_OK;
 }
 
@@ -233,15 +216,11 @@ mk_result_t mk_ledger_open(mk_ledger_t *ledger, const char *path,
       !copy_str(ledger->path, sizeof(ledger->path), path))
     return MK_ERR_ARG;
   ledger->machine_id = machine_id;
-  if (ledger->path[0] == '\0') {
-    LEDGER_TRACE(ledger, "ledger.open", "path=(memory)");
+  if (ledger->path[0] == '\0')
     return MK_OK;
-  }
 
   mk_result_t result = load(ledger);
   if (result != MK_OK) {
-    LEDGER_TRACE(ledger, "ledger.open", "path=%s result=\"%s\"", ledger->path,
-                 mk_result_name(result));
     ledger->count = 0;
     return result;
   }
@@ -260,8 +239,6 @@ mk_result_t mk_ledger_open(mk_ledger_t *ledger, const char *path,
       ++changed;
     }
   }
-  LEDGER_TRACE(ledger, "ledger.open", "path=%s entries=%zu interrupted=%d",
-               ledger->path, ledger->count, changed);
   return changed ? save(ledger) : MK_OK;
 }
 
@@ -279,16 +256,9 @@ int mk_ledger_lookup(const mk_ledger_t *ledger, const mk_message_t *start,
   int i = find(ledger, start->batch_id);
   if (i < 0 && start->message_id[0] != '\0')
     i = find_refused(ledger, start->message_id);
-  if (i < 0) {
-    LEDGER_TRACE(ledger, "ledger.lookup", "batch=%s id=%s result=new",
-                 start->batch_id, start->message_id);
+  if (i < 0)
     return 0;
-  }
   const mk_ledger_entry_t *e = &ledger->entries[i];
-  LEDGER_TRACE(ledger, "ledger.lookup",
-               "batch=%s id=%s result=duplicate state=%s first_id=%s",
-               start->batch_id, start->message_id,
-               e->refused ? "refused" : mk_type_name(e->state), e->command_id);
   mk_result_t result =
       e->state == MK_DONE    ? mk_make_done(resend, start)
       : e->state == MK_ERROR ? mk_make_error(resend, start, e->error_code,
@@ -329,8 +299,6 @@ mk_result_t mk_ledger_accept(mk_ledger_t *ledger, const mk_message_t *start) {
   e.state = MK_RUNNING;
   /* Not durable on failure: the caller must not run the batch. */
   mk_result_t result = append(ledger, &e);
-  LEDGER_TRACE(ledger, "ledger.accept", "batch=%s id=%s result=\"%s\"",
-               start->batch_id, start->message_id, mk_result_name(result));
   return result;
 }
 
@@ -354,9 +322,6 @@ mk_result_t mk_ledger_refuse(mk_ledger_t *ledger, const mk_message_t *start,
     memcpy(e.error_code, error.error_code, sizeof(e.error_code));
     memcpy(e.error_reason, error.error_reason, sizeof(e.error_reason));
     result = append(ledger, &e);
-    LEDGER_TRACE(ledger, "ledger.refuse", "batch=%s id=%s error=%s result=\"%s\"",
-                 start->batch_id, start->message_id, error.error_code,
-                 mk_result_name(result));
     if (result != MK_OK)
       return result;
   }
@@ -378,10 +343,6 @@ mk_result_t mk_ledger_record(mk_ledger_t *ledger, const mk_message_t *status) {
   e->unreported = 0;
   copy_str(e->error_code, sizeof(e->error_code), status->error_code);
   copy_str(e->error_reason, sizeof(e->error_reason), status->error_reason);
-  LEDGER_TRACE(ledger, "ledger.record", "batch=%s state=%s%s%s",
-               status->batch_id, mk_type_name(status->type),
-               status->error_code[0] != '\0' ? " error=" : "",
-               status->error_code);
   return save(ledger);
 }
 
@@ -399,8 +360,6 @@ int mk_ledger_next_interrupted(mk_ledger_t *ledger, mk_message_t *status) {
                       e->batch_id) != MK_OK ||
         mk_make_error(status, &start, e->error_code, e->error_reason) != MK_OK)
       continue;
-    LEDGER_TRACE(ledger, "ledger.interrupted", "batch=%s first_id=%s",
-                 e->batch_id, e->command_id);
     return 1;
   }
   return 0;

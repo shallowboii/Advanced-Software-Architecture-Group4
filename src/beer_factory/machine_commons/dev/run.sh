@@ -1,11 +1,11 @@
 #!/bin/sh
-# Runs a command in the dev container (gcc 14, librdkafka, cJSON, MQTT-C,
-# python3), in the folder you call it from. src/beer_factory is mounted at
-# /src, and the container joins the broker network from
-# machine_kafka/docker-compose.yml, where Kafka is kafka:29092 and MQTT is
-# mosquitto:1883 (KAFKA_BROKERS / MQTT_HOST are set accordingly).
+# Runs a command in the dev container (gcc 14, librdkafka, cJSON, MQTT-C), in
+# the folder you call it from. src/beer_factory is mounted at /src, and the
+# container joins the broker network from machine_kafka/docker-compose.yml,
+# where Kafka is kafka:29092 (KAFKA_BROKERS is set accordingly). MQTT_HOST,
+# MQTT_PORT, MACHINE_ID and TIME_SCALE are passed through when set.
 #
-#   cd src/beer_factory/boiling
+#   cd src/beer_factory/whirlpooling
 #   ../machine_commons/dev/run.sh make test
 #   ../machine_commons/dev/run.sh make run        # the controller
 #
@@ -58,7 +58,6 @@ docker run --rm --init --name "$name" $network ${DEV_DOCKER_ARGS:-} \
   -e TINI_KILL_PROCESS_GROUP=1 \
   -v "$mount:/src" -w "/src$rel" \
   -e KAFKA_BROKERS="${KAFKA_BROKERS:-kafka:29092}" \
-  -e MQTT_HOST="${MQTT_HOST:-mosquitto}" \
-  -e MK_TRACE -e TIME_SCALE -e WAIT_S \
+  -e MQTT_HOST -e MQTT_PORT -e MACHINE_ID -e TIME_SCALE \
   beer-factory-dev "$@" &
 wait $!

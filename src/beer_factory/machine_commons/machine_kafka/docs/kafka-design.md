@@ -206,9 +206,7 @@ transport code or the backend.
 recipe of a batch travels with each `start`. When the supervisor selects
 Beer B for a new batch, the backend/scheduler resolves Beer B's recipe
 version at admission and, for every stage, copies that machine type's
-parameters into the start it sends for this batch
-(`examples/recipes.c`, `recipe_apply`: an experimental, temporary table;
-where recipes are defined and versioned is still open). Every stage controller therefore
+parameters into the start it sends for this batch. Every stage controller therefore
 receives the Beer B parameters when the batch reaches it; batches already in
 the line keep their own parameters, which is what "when the production line
 allows for it" requires (`IMPLEMENTATION_PLAN.md`: active batches never
@@ -552,17 +550,22 @@ it assigns the partition, and only then reports `mk_ready() == 1`.
 Machines send their first `idle` only after that, and the scheduler only
 dispatches after `idle`. Tested in `test_bus` scenario 4.
 
-### 6.4 Integration point for the scheduler: heartbeat payload
+### 6.4 The scheduler service
 
-The scheduler joins two sources: MQTT heartbeats (alive?) and Kafka statuses
-(ready?). They must name machines the same way:
+`backend/src/scheduling` (`scheduler.h`) is the scheduler's Kafka side, ready
+for the scheduling policy:
 
-> The heartbeat payload must contain `machine_type` and `machine_id` with
-> exactly the values used in the Kafka messages (`"boiling"`, `11`).
+- `scheduler_open` subscribes to every machine type (`MK_MACHINE_TYPES`) with
+  `MK_RECEIVE_STATUSES` in consumer group `scheduler`.
+- `scheduler_poll` stores each status in a machine table (one row per
+  `(machine_type, machine_id)`: state, batch, error, last `ts_utc`) and then
+  calls `dispatch()`.
+- `dispatch()` (`dispatch.c`) is the one place for the policy. It reads the
+  table (`scheduler_machines`) and sends work with `scheduler_start` (params
+  such as `duration_s`), `scheduler_stop` and `scheduler_flush`. It is empty
+  today.
 
-Today `../machine_mqtt` sends a native C struct with one `machine_name`
-field (e.g. `"boiling-1"`). That is not language-neutral (the Java backend
-would have to mirror the struct layout and byte order). See open questions.
+A new machine needs no change here: its first status adds its row.
 
 ---
 

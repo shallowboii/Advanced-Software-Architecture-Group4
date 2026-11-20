@@ -4,7 +4,7 @@ FROM gcc:14
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      librdkafka-dev libcjson-dev pkg-config python3 \
+      librdkafka-dev libcjson-dev pkg-config \
  && rm -rf /var/lib/apt/lists/*
 
 # MQTT-C: the headers in machine_mqtt/ are this version (v1.1.7).

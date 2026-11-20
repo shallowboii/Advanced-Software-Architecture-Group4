@@ -1,0 +1,66 @@
+@startuml components
+title Beer factory – Kafka production bus: components
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultFontSize 11
+skinparam wrapWidth 600
+left to right direction
+
+package "backend/src/scheduling  (build/scheduler)" {
+  component "<b>scheduler.h</b>\n----\nscheduler_t *scheduler_open(const char *brokers)\nint scheduler_poll(scheduler_t *s, int timeout_ms)\nmk_result_t scheduler_start(scheduler_t *s, const char *type, int id, const char *batch_id, const mk_param_t *params, size_t n_params)\nmk_result_t scheduler_stop(scheduler_t *s, const char *type, int id, const char *batch_id)\nmk_result_t scheduler_flush(scheduler_t *s, const char *type, int id, const char *batch_id)\nconst machine_table_t *scheduler_machines(const scheduler_t *s)\nvoid scheduler_close(scheduler_t *s)\nconst machine_t *machine_table_apply(machine_table_t *table, const mk_message_t *status)\nconst machine_t *machine_table_find(const machine_table_t *table, const char *type, int id)\nvoid dispatch(scheduler_t *s, const machine_t *changed)" as SCHH
+  component "<b>scheduler_main.c</b>\n----\nReads KAFKA_BROKERS, polls every 200 ms until SIGINT/SIGTERM." as SMAIN
+  component "<b>scheduler.c</b>\n----\nOne bus on all six topics (statuses only); sends start/stop/flush." as SCHC
+  component "<b>machine_table.c</b>\n----\nOne row per (machine_type, machine_id): state, batch, error, last ts_utc." as TABLE
+  component "<b>dispatch.c</b>\n----\nThe scheduling policy. Empty for now." as DISP
+}
+
+package "machine_commons/machine_kafka" {
+  component "<b>machine_kafka.h</b>\n----\nmk_make_start / mk_make_command / mk_param_set / mk_param_get\nmk_make_idle / mk_make_running / mk_make_done / mk_make_error\nmk_encode / mk_decode\nmk_ledger_open / lookup / accept / refuse / record / next_interrupted\nmk_open / mk_ready / mk_send / mk_poll / mk_close" as MKH
+  component "<b>message.c</b>\n----\nBuild, validate, JSON encode/decode (schema v3)." as MSG
+  component "<b>bus.c</b>\n----\nlibrdkafka producer + consumer: topic = machine_type,\nkey = machine_id, commit after the handler." as BUS
+  component "<b>ledger.c</b>\n----\nNever run a batch twice: file with the last 16 batches." as LED
+}
+
+package "whirlpooling  (build/whirlpooling)" {
+  component "<b>main.c</b>\n----\nController: commands from Kafka, ledger, state machine,\nstatuses back; optional MQTT heartbeat." as WMAIN
+  component "<b>whirlpooling.h / .c</b>\n----\nwhirlpooling_init / set_duration / start / update / stop / flush\nState machine WAIT -> WHIRLPOOL -> WAIT (+ STOPPED)." as WP
+}
+
+package "machine_commons/machine_mqtt" {
+  component "<b>heartbeat.c</b>\n----\nheartbeat_init / heartbeat_make / heartbeat_send\n(only when MQTT_HOST is set)" as HB
+}
+
+node "Kafka 3.9.1 (KRaft)\nkafka:29092 / localhost:9092" {
+  queue "mashing\nlautering\nboiling" as T1
+  queue "<b>whirlpooling</b>\n1 partition, key = machine_id\nstart / stop / flush\nidle / running / done / error" as TW
+  queue "fermentation\nfiltering" as T2
+}
+
+component "Kafka UI\nlocalhost:8080" as UI
+file "whirlpooling-1.ledger" as LFILE
+
+SMAIN --> SCHC : calls
+SCHC --> TABLE : calls machine_table_apply
+SCHC --> DISP : calls dispatch
+DISP ..> SCHC : calls scheduler_start / stop / flush (later)
+SCHC ..> SCHH : includes
+SCHC --> MSG : calls
+SCHC --> BUS : calls
+
+WMAIN --> WP : calls
+WMAIN --> LED : calls
+WMAIN --> MSG : calls
+WMAIN --> BUS : calls
+WMAIN ..> HB : calls (optional)
+LED --> LFILE : writes
+LED --> MSG : calls
+BUS --> MSG : calls
+MSG ..> MKH : implements
+BUS ..> MKH : implements
+LED ..> MKH : implements
+
+BUS --> TW : publishes to /\nsubscribes to
+BUS --> T1 : scheduler subscribes
+BUS --> T2 : scheduler subscribes
+UI --> TW : reads
+@enduml
