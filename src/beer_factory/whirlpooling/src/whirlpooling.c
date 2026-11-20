@@ -10,9 +10,25 @@ whirlpooling_result_t whirlpooling_init(whirlpooling_t *whirlpooling,
 
   *whirlpooling = (whirlpooling_t){.state = WHIRLPOOLING_WAIT,
                                    .batches = batches,
+                                   .duration_seconds =
+                                       WHIRLPOOLING_DURATION_SECONDS,
                                    .started_at_seconds = 0,
                                    .last_time_seconds = 0};
 
+  return WHIRLPOOLING_OK;
+}
+
+whirlpooling_result_t whirlpooling_set_duration(whirlpooling_t *whirlpooling,
+                                                uint64_t seconds) {
+  if (whirlpooling == NULL || seconds == 0) {
+    return WHIRLPOOLING_INVALID_ARGUMENT;
+  }
+
+  if (whirlpooling->state != WHIRLPOOLING_WAIT) {
+    return WHIRLPOOLING_BUSY;
+  }
+
+  whirlpooling->duration_seconds = seconds;
   return WHIRLPOOLING_OK;
 }
 
@@ -22,7 +38,9 @@ whirlpooling_result_t whirlpooling_start(whirlpooling_t *whirlpooling,
     return WHIRLPOOLING_INVALID_ARGUMENT;
   }
 
-  if (now_seconds < whirlpooling->last_time_seconds) {
+  /* Time must not go back, and the deadline must be representable. */
+  if (now_seconds < whirlpooling->last_time_seconds ||
+      now_seconds > UINT64_MAX - whirlpooling->duration_seconds) {
     return WHIRLPOOLING_INVALID_TIME;
   }
 
@@ -62,7 +80,7 @@ whirlpooling_result_t whirlpooling_update(whirlpooling_t *whirlpooling,
 
   /* Guard: a >= T_WHIRLPOOLING (subtraction cannot overflow here). */
   if (now_seconds - whirlpooling->started_at_seconds <
-      WHIRLPOOLING_DURATION_SECONDS) {
+      whirlpooling->duration_seconds) {
     return WHIRLPOOLING_NO_CHANGE;
   }
 
@@ -71,4 +89,30 @@ whirlpooling_result_t whirlpooling_update(whirlpooling_t *whirlpooling,
   whirlpooling->state = WHIRLPOOLING_WAIT;
 
   return WHIRLPOOLING_DONE;
+}
+
+whirlpooling_result_t whirlpooling_stop(whirlpooling_t *whirlpooling) {
+  if (whirlpooling == NULL) {
+    return WHIRLPOOLING_INVALID_ARGUMENT;
+  }
+
+  if (whirlpooling->state != WHIRLPOOLING_WHIRLPOOL) {
+    return WHIRLPOOLING_NOT_RUNNING;
+  }
+
+  whirlpooling->state = WHIRLPOOLING_STOPPED;
+  return WHIRLPOOLING_OK;
+}
+
+whirlpooling_result_t whirlpooling_flush(whirlpooling_t *whirlpooling) {
+  if (whirlpooling == NULL) {
+    return WHIRLPOOLING_INVALID_ARGUMENT;
+  }
+
+  if (whirlpooling->state == WHIRLPOOLING_WAIT) {
+    return WHIRLPOOLING_NOT_RUNNING;
+  }
+
+  whirlpooling->state = WHIRLPOOLING_WAIT; /* the wort is discarded */
+  return WHIRLPOOLING_OK;
 }

@@ -21,7 +21,7 @@ KAFKA_BROKERS ?= localhost:9092
 
 OBJS := build/message.o build/ledger.o build/bus.o build/trace.o
 
-.PHONY: all test test-kafka trace libs clean
+.PHONY: all test test-kafka trace examples libs clean
 
 all: build/libmachinekafka.a
 
@@ -44,6 +44,12 @@ build/test-ledger: message.c ledger.c trace.c machine_kafka.h trace.h tests/test
 # Bus test: needs a running broker at KAFKA_BROKERS (see docker-compose.yml).
 build/test-bus: build/libmachinekafka.a tests/test_bus.c | build
 	$(CC) $(CPPFLAGS) -I. $(KAFKA_CFLAGS) $(CFLAGS) tests/test_bus.c build/libmachinekafka.a $(LDFLAGS) $(KAFKA_LIBS) -lm $(LDLIBS) -o $@
+
+# Example scheduler: sends start/stop/flush with Beer A/B recipes.
+build/scheduler-cli: build/libmachinekafka.a examples/scheduler_cli.c examples/recipes.c examples/recipes.h | build
+	$(CC) $(CPPFLAGS) -I. $(KAFKA_CFLAGS) $(CFLAGS) examples/scheduler_cli.c examples/recipes.c build/libmachinekafka.a $(LDFLAGS) $(KAFKA_LIBS) -lm $(LDLIBS) -o $@
+
+examples: build/scheduler-cli
 
 test: build/test-message build/test-ledger
 	./build/test-message

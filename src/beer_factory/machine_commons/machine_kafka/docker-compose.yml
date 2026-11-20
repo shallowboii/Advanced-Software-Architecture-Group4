@@ -1,7 +1,10 @@
-# Single Kafka broker in KRaft mode (no ZooKeeper) for development and for
-# `make test-kafka`, plus a one-shot service that creates the topics.
+# Development brokers for the machines: a single Kafka broker in KRaft mode
+# (no ZooKeeper) plus a one-shot service that creates the topics, the Kafka UI
+# and an MQTT broker (Mosquitto) for the heartbeats.
 #
-#   docker compose up -d          # broker on localhost:9092, kafka:29092 inside
+#   docker compose up -d          # Kafka localhost:9092 (kafka:29092 inside),
+#                                 # MQTT localhost:1883 (mosquitto:1883 inside),
+#                                 # Kafka UI http://localhost:8080
 #   docker compose logs topics    # topic creation output
 #   docker compose down -v        # stop and delete all data
 #
@@ -50,6 +53,17 @@ services:
       - ./scripts:/scripts:ro
     entrypoint: ["sh", "/scripts/create-topics.sh"]
     restart: "no"
+
+  # MQTT broker for the machine heartbeats (topic "heartbeat"):
+  # localhost:1883 on this computer, mosquitto:1883 in the compose network.
+  mosquitto:
+    image: eclipse-mosquitto:2.0.22
+    container_name: beer-mosquitto
+    # No authentication: reachable from this computer only.
+    ports:
+      - "127.0.0.1:1883:1883"
+    volumes:
+      - ./scripts/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
 
   # Web UI for browsing topics, messages and consumer groups:
   # http://localhost:8080

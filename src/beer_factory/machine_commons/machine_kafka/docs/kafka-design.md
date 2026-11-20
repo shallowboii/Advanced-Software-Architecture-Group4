@@ -131,9 +131,12 @@ each machine runs a batch at most once (section 5), so that is unique.
 `stop` (FR-13) stops a single machine. `flush` (FR-14) discards a batch from
 a machine: a batch that spoiled (its hold deadline passed) or that the
 operator cancelled is removed and its loss is recorded once
-(`IMPLEMENTATION_PLAN.md`, "Flush"). Both are in the schema now so they need
-no schema change later. A machine that does not implement them yet answers
-`error` with code `UNSUPPORTED`.
+(`IMPLEMENTATION_PLAN.md`, "Flush"). The machine answers both with an `error`
+status whose code is the outcome (`STOPPED`, `FLUSHED`, see 2.3), because
+the batch does not move on. A stopped or flushed batch is recorded in the
+ledger, so a re-sent start never runs it again. The whirlpooling controller
+implements both (`whirlpooling/src/main.c`); a machine that does not implement
+them yet answers `UNSUPPORTED`.
 
 ### 2.3 Error codes
 
@@ -145,6 +148,10 @@ no schema change later. A machine that does not implement them yet answers
 | `MISSING_PARAM`, `INVALID_PARAM` | params incomplete or out of range | not executed |
 | `INTERRUPTED` | the machine restarted while the batch was running | partly executed; operator decides (flush) |
 | `UNSUPPORTED` | command type not implemented yet | not executed |
+| `STOPPED` | answer to `stop`: the machine stopped the batch (kettle: heater off, wort stays) | partly executed; waits for `flush` |
+| `FLUSHED` | answer to `flush`: the batch was discarded; `idle` follows | discarded |
+| `NOT_RUNNING` | `stop` while nothing (or another batch) runs | nothing changed |
+| `NOT_HERE` | `flush` of a batch that is not in this machine | nothing changed |
 | machine specific (`OVERHEAT`, …) | the batch failed while running | partly executed; operator decides |
 
 ### 2.4 Examples
@@ -194,6 +201,18 @@ no schema change later. A machine that does not implement them yet answers
 values (and possibly add parameter names that a machine already
 understands), so they need no code change in the library, the scheduler's
 transport code or the backend.
+
+**Selecting Beer A or Beer B.** Machines have no "set recipe" command: the
+recipe of a batch travels with each `start`. When the supervisor selects
+Beer B for a new batch, the backend/scheduler resolves Beer B's recipe
+version at admission and, for every stage, copies that machine type's
+parameters into the start it sends for this batch
+(`examples/recipes.c`, `recipe_apply`: an experimental, temporary table;
+where recipes are defined and versioned is still open). Every stage controller therefore
+receives the Beer B parameters when the batch reaches it; batches already in
+the line keep their own parameters, which is what "when the production line
+allows for it" requires (`IMPLEMENTATION_PLAN.md`: active batches never
+change recipe).
 
 Suggested names (snake_case with a unit suffix); the library does not
 interpret them, each machine documents the ones it reads:

@@ -22,6 +22,93 @@ in [docs/kafka-design.md](docs/kafka-design.md).
 | New machines | Same type: start it, nothing else. New type: create its topic and add it to the scheduler's topic list. |
 | Discovery | Not over Kafka: the scheduler learns about machines from MQTT heartbeats and dispatches once it has seen their `idle`. |
 
+## Who uses the library: machine, scheduler, or both?
+
+Both, with different halves. The bus is symmetric; the ledger is only for
+machines.
+
+| | Machine (every controller: boiling, mashing, …) | Scheduler |
+|---|---|---|
+| Bus | `mk_open` with its own type as topic, `receive = MK_RECEIVE_COMMANDS` | `mk_open` with all types (`MK_MACHINE_TYPES`), `receive = MK_RECEIVE_STATUSES` |
+| Receives | `start`, `stop`, `flush` for its type (ignores other `machine_id`s) | `idle`, `running`, `done`, `error` of every machine |
+| Sends | statuses: `mk_make_idle/running/done/error` + `mk_send` | commands: `mk_make_start` + recipe `params`, `mk_make_command(MK_STOP/MK_FLUSH)` |
+| Ledger | **yes**: `mk_ledger_*` decides "run or answer from memory" | no: it re-sends starts freely; the machines make that safe |
+| Also | MQTT heartbeat (`../machine_mqtt`) | listens to heartbeats; dispatches only to machines that are alive and `idle` |
+
+Working examples:
+
+- **Machine:** [`../../whirlpooling/src/main.c`](../../whirlpooling/src/main.c),
+  the whirlpooling controller (Kafka + ledger + MQTT heartbeat + stop/flush),
+  tested end to end in `../../whirlpooling/tests/test_controller.c`.
+- **Scheduler side:** [`examples/scheduler_cli.c`](examples/scheduler_cli.c),
+  a command-line stand-in that sends start/stop/flush with a Beer A/B recipe
+  and prints the answers (`make examples`, see the whirlpooling README).
+
+If the scheduler is written in Java, it uses the same JSON over Kafka
+directly (`docs/kafka-design.md`, section 2.7); this C library is then only
+used by the machines.
+
+## Recipes (Beer A / Beer B)
+
+> **Experimental / temporary.** `examples/recipes.c` only exists so the
+> whirlpooling controller can be tested with Beer A / Beer B values. Where
+> recipes really live (backend recipe versions? the scheduler? a shared
+> fixture file?) and who turns them into start parameters is still open. The
+> mechanism below (recipe values in the start's `params`) does not depend on
+> that decision; only the table's location does.
+
+A machine has no "change recipe" function, and doesn't need one: **the
+recipe of a batch travels with every `start`.** When the supervisor picks
+Beer B for a new batch, the scheduler (backend) looks up Beer B's parameters
+for each machine type and puts them into the `params` of each start it sends
+for that batch:
+
+```c
+mk_make_start(&start, "whirlpooling", 1, "B-0007");
+recipe_apply(&start, "B");          /* examples/recipes.c: speed_rpm=45, duration_s=3600 */
+mk_send(bus, &start);
+```
+
+The machine reads what it needs when the start arrives:
+
+```c
+double duration = 3600, speed = 0;
+mk_param_get(start, "duration_s", &duration);
+mk_param_get(start, "speed_rpm", &speed);
+```
+
+So every stage controller receives the Beer B parameters exactly when Beer B
+reaches it. "When the production line allows for it" follows naturally:
+batches already in the line keep the parameters of their own start; only
+batches started after the change get the new beer. New recipes need no code
+change (QA-7), only new values. [`examples/recipes.c`](examples/recipes.c)
+holds the experimental table (Ale / Lager durations from
+`IMPLEMENTATION_PLAN.md`, other values made up).
+
+## The ledger file
+
+Kafka delivers a message **at least once**, and the scheduler may re-send a
+start after a timeout or its own restart. Without protection a kettle could
+boil the same batch twice. The ledger is a small text file per machine
+(`ledger.c`) that remembers the last 16 batches the machine accepted and how
+they ended:
+
+```
+mk-ledger 2 boiling 3
+D B-0007 scheduler-6aff1da4-17 -
+E B-0008 scheduler-6aff1da4-21 OVERHEAT kettle above 105 C
+X B-0009 scheduler-6aff1da4-22 BUSY B-0008
+R B-0010 scheduler-6aff1da4-30 -
+```
+
+`D` done, `E` error (also STOPPED / FLUSHED), `X` refused without running,
+`R` running. For every start the machine asks the ledger first
+(`mk_ledger_lookup`): a known batch gets its last status back instead of
+being run again. A new batch is written to the file (`mk_ledger_accept`,
+with fsync) **before** the machine touches any hardware, so even a crash
+right after switching the heater on can't lead to a second run: after the
+restart, the `R` line becomes `error INTERRUPTED` and is reported once.
+
 ## Files
 
 | File | Contents |
@@ -30,9 +117,11 @@ in [docs/kafka-design.md](docs/kafka-design.md).
 | `message.c` | Build, validate, encode and decode messages; params |
 | `ledger.c` | The ledger file: lookup, accept, refuse, record |
 | `bus.c` | librdkafka wrapper: open, send, poll, commit, rebalance, delivery reports |
-| `trace.c`, `trace.h` | `MK_TRACE=1` debug output (internal) |
+| `trace.c`, `trace.h` | Debugging only, internal: with `MK_TRACE=1` the library prints one line per call and Kafka event (send, receive, commit, ledger decisions, why a message was skipped). Off by default and costs nothing then; not part of the API. |
 | `tests/` | message, ledger and broker tests |
-| `docker-compose.yml`, `scripts/` | broker, topic creation, Kafka UI, `docker-make.sh` |
+| `examples/` | `scheduler_cli.c` (scheduler side) and `recipes.c/.h` (Beer A/B) |
+| `docker-compose.yml`, `scripts/` | Kafka, topic creation, Kafka UI, Mosquitto (MQTT), `docker-make.sh` |
+| `../dev/` | dev container image and `run.sh` (gcc, librdkafka, cJSON, MQTT-C) for Windows |
 
 ## Prerequisites
 
@@ -50,13 +139,14 @@ On Windows, build and test inside a container instead (see below).
 ## Broker
 
 ```sh
-docker compose up -d            # Kafka 3.9 in KRaft mode + creates the topics + Kafka UI
+docker compose up -d            # Kafka 3.9 (KRaft) + topics + Kafka UI + Mosquitto (MQTT)
 docker compose logs topics      # list of created topics
 docker compose down -v          # stop and delete all messages and offsets
 ```
 
 Kafka UI (topics, messages, consumer groups and their lag) runs on
-<http://localhost:8080>.
+<http://localhost:8080>. The MQTT broker for heartbeats is `localhost:1883`
+(`mosquitto:1883` inside the compose network).
 
 The broker listens on `localhost:9092` for programs on the host and on
 `kafka:29092` for containers in the compose network. Topic auto-creation is
@@ -121,7 +211,7 @@ static void on_command(const mk_message_t *msg, void *user) {
   mk_message_t status;
   if (msg->machine_id != m->id)
     return; /* for another boiler */
-  if (msg->type != MK_START) { /* stop / flush: not implemented yet */
+  if (msg->type != MK_START) { /* stop / flush: see whirlpooling/src/main.c */
     if (mk_make_error(&status, msg, "UNSUPPORTED", mk_type_name(msg->type)) == MK_OK)
       mk_send(m->bus, &status);
     return;
