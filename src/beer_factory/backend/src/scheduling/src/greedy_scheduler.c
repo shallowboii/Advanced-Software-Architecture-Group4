@@ -2,25 +2,34 @@
  * Greedy scheduler. 
  *
  * Build:
- *   gcc -Wall -O2 -o brewery brewery_scheduler.c structure.c \
- *       mashing.c lautering.c boiling.c whirlpooling.c fermentation.c filtering.c
+ *   gcc -Wall -O2 -o brewery brewery_scheduler.c machine_kafka.c structure.c \
+ *       mashing.c lautering.c boiling.c whirlpooling.c fermentation.c \
+ *       filtering.c -lrdkafka -lhiredis
  * Run:
  *   ./brewery [number_of_batches]
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
 #include "structure.h"
 #include "redis_conn.h"
+#include "machine_kafka.h"
 
 #define MAX_BATCHES      64
 #define DEFAULT_BATCHES  6
-#define RELEASE_INTERVAL 12   /* hours between batch releases */
+#define RELEASE_INTERVAL 0   /* hours between batch releases */
 #define TANK_STEP 4 //step where batch goes in tank
 
-static void *machines[NUM_STEPS][MAX_MACHINES];  
+//Interact with kafka
+#define BROKERS              "localhost:9092"
+#define CONSUMER_GROUP       "brewery-scheduler"
+#define STATUS_TOPIC_REGEX   "^machine\\..+"  /* every machine type's topic */
+#define SECONDS_PER_SIM_HOUR 1    /* time scale: 1 sim hour = 1 real second */
+#define WARMUP_S             5    /* let the consumer join its group first */
+#define RUN_TIMEOUT_S        3600 /* give up if machines never finish */
 
-static int was_done[NUM_STEPS][MAX_MACHINES];
+static void *machines[NUM_STEPS][MAX_MACHINES];  
 
 typedef struct {
     int id;
@@ -31,20 +40,41 @@ typedef struct {
     int end;                  /* time the last step finishes */
 } Batch;
 
+typedef enum {
+    ST_PENDING,   /* not sent yet */
+    ST_SENT,      /* START sent, waiting for RUNNING */
+    ST_RUNNING,   /* machine reported RUNNING */
+    ST_DONE,      /* machine went RUNNING -> IDLE */
+    ST_FAILED     /* machine reported ERROR */
+} StepState;
+
+static Batch      batches[MAX_BATCHES];
+static int        n;                                /* number of batches */
+static StepState  st[MAX_BATCHES][NUM_STEPS];
+static int        failed[MAX_BATCHES];              /* batch hit an ERROR */
+static int        current[NUM_STEPS][MAX_MACHINES]; /* batch index or -1 */
+static int        tank_owner[MAX_MACHINES];         /* batch index or -1 */
+
+static redisContext *rc;
+static rd_kafka_t   *prod;
+static time_t        t0;                            /* run start */
+
 static int cmp_release(const void *a, const void *b)
 {
     const Batch *x = a, *y = b;
-    return (x->release > y->release) - (x->release < y->release);
+    if (x->release != y->release)
+        return (x->release > y->release) - (x->release < y->release);
+    return (x->id > y->id) - (x->id < y->id);   /* qsort is not stable */
 }
 
-/* What each step produces when a machine finishes. Index = step. */
+/* What each step produces when a machine finishes. */
 static const char *OUTPUT_TYPE[NUM_STEPS] = {
-    "mash_batch",          /* mashing */
-    "sweet_wort_batch",    /* lautering */
-    "boiled_wort_batch",   /* boiling */
-    "clarified_wort_batch",/* whirlpooling */
-    "green_beer_batch",    /* fermentation */
-    "filtered_beer_batch"  /* filtering */
+    "mash_batch",          
+    "sweet_wort_batch",    
+    "boiled_wort_batch",   
+    "clarified_wort_batch",
+    "green_beer_batch",    
+    "filtered_beer_batch"  
 };
 
 /* Frees the reply and logs an error if the command failed. */
@@ -59,7 +89,8 @@ static void redis_check(redisContext *c, redisReply *r, const char *what)
 static void redis_reset(redisContext *c)
 {
     redisReply *r = redisCommand(c,
-        "DEL brewery:last_started brewery:last_done_type brewery:done_count brewery:batch_tank");
+        "DEL brewery:last_started brewery:last_done_type brewery:done_count "
+        "brewery:batch_tank brewery:last_error");
     redis_check(c, r, "DEL");
 }
 
@@ -95,20 +126,231 @@ static void record_done(redisContext *c, int step)
     redis_check(c, r, "SET last_done_type");
 }
 
+/* Call when a machine reports ERROR. */
+static void record_error(redisContext *c, int step, int machine, int batch_id,
+                         const char *code, const char *reason)
+{
+    redisReply *r = redisCommand(c,
+        "HSET brewery:last_error step %d step_name %s machine %d batch %d "
+        "code %s reason %s real_time %lld",
+        step + 1, PLANT[step]->name, machine + 1, batch_id,
+        code[0] ? code : "-", reason[0] ? reason : "-",
+        (long long)time(NULL));
+    redis_check(c, r, "HSET last_error");
+}
+
+static int sim_hour(void)
+{
+    return (int)((time(NULL) - t0) / SECONDS_PER_SIM_HOUR);
+}
+
+static void utc_now(char *buf, size_t len)
+{
+    time_t t = time(NULL);
+    struct tm tm;
+    gmtime_r(&t, &tm);
+    strftime(buf, len, "%Y-%m-%dT%H:%M:%SZ", &tm);
+}
+
+/* A tank with no batch reserved on it, or -1 when every tank is taken. */
+static int free_tank(void)
+{
+    for (int m = 0; m < PLANT[TANK_STEP]->count; m++)
+        if (tank_owner[m] < 0) return m;
+    return -1;
+}
+
+static void release_tanks_of(int b)
+{
+    for (int m = 0; m < MAX_MACHINES; m++)
+        if (tank_owner[m] == b) tank_owner[m] = -1;
+}
+
+/* The nearest earlier batch that has not failed, or -1. */
+static int prev_active(int b)
+{
+    for (int p = b - 1; p >= 0; p--)
+        if (!failed[p]) return p;
+    return -1;
+}
+
+/* May batch b start step s right now? Same rules as the old planner, but
+ * checked against what the machines actually reported. */
+static int can_start(int b, int s)
+{
+    int m = batches[b].machine[s];
+
+    if (failed[b]) return 0;
+    if (st[b][s] != ST_PENDING) return 0;
+    if (s > 0 && st[b][s - 1] != ST_DONE) return 0;      /* previous step */
+
+    if (s == 0) {
+        /* Rule 1: the previous batch must already be in its tank. */
+        int p = prev_active(b);
+        if (p >= 0) {
+            StepState ps = st[p][TANK_STEP];
+            if (ps != ST_RUNNING && ps != ST_DONE) return 0;
+        }
+        /* Rule 2: a tank must be free right now. */
+        if (free_tank() < 0) return 0;
+    }
+
+    if (current[s][m] >= 0) return 0;                    /* machine busy */
+
+    /* keep the planned order on each machine (not for the tank step:
+     * tanks are reserved exclusively, so there is no queue) */
+    if (s != TANK_STEP)
+        for (int p = 0; p < b; p++) {
+            if (failed[p]) continue;
+            if (batches[p].machine[s] == m && st[p][s] != ST_DONE) return 0;
+        }
+    return 1;
+}
+
+static void send_start(int b, int s)
+{
+    if (s == 0) {
+        /* Reserve a free tank for this batch (can_start checked there is one) */
+        int t = free_tank();
+        tank_owner[t] = b;
+        batches[b].tank = t;
+        batches[b].machine[TANK_STEP] = t;
+        printf("h%4d: batch %d reserves tank %d\n",
+               sim_hour(), batches[b].id, t + 1);
+    }
+
+    int m = batches[b].machine[s];
+    mk_message_t msg = {0};
+    char topic[64];
+
+    msg.type = MK_START;
+    snprintf(msg.machine_type, sizeof msg.machine_type, "%s", PLANT[s]->name);
+    msg.machine_id = m + 1;
+    snprintf(msg.batch_id, sizeof msg.batch_id, "batch%d", batches[b].id);
+    snprintf(msg.message_id, sizeof msg.message_id,
+             "batch%d-step%d-start", batches[b].id, s + 1);   /* stable id */
+    utc_now(msg.ts_utc, sizeof msg.ts_utc);
+
+    snprintf(msg.params[0].name, sizeof msg.params[0].name, "duration_s");
+    msg.params[0].value =
+        (double)PLANT[s]->duration(machines[s][m]) * SECONDS_PER_SIM_HOUR;
+    msg.n_params = 1;
+
+    snprintf(topic, sizeof topic, "machine.%s", PLANT[s]->name);
+    mk_send(prod, topic, &msg);
+
+    st[b][s] = ST_SENT;
+    current[s][m] = b;
+    printf("h%4d: %-16s machine %d START sent (batch %d)\n",
+           sim_hour(), PLANT[s]->name, m + 1, batches[b].id);
+}
+
+static int step_of(const char *type)
+{
+    for (int s = 0; s < NUM_STEPS; s++)
+        if (!strcmp(PLANT[s]->name, type)) return s;
+    return -1;
+}
+
+/* Called by mk_poll for every message on the machine.* topics. */
+static void on_status(const mk_message_t *msg, void *opaque)
+{
+    (void)opaque;
+
+    /* commands and statuses share a topic: ignore our own commands */
+    if (msg->type != MK_IDLE && msg->type != MK_RUNNING &&
+        msg->type != MK_ERROR)
+        return;
+
+    int s = step_of(msg->machine_type);
+    int m = msg->machine_id - 1;
+    if (s < 0 || m < 0 || m >= PLANT[s]->count) return;
+
+    int b = current[s][m];
+    if (b < 0) return;        /* idle heartbeat, or not something we started */
+
+    /* If the status names a batch, it must be the one we expect on this
+     * machine. This stops a redelivered status of an earlier batch from being
+     * credited to the batch that now uses the same machine. */
+    char expect[MK_BATCH_LEN];
+    snprintf(expect, sizeof expect, "batch%d", batches[b].id);
+    if (msg->batch_id[0] && strcmp(msg->batch_id, expect) != 0) return;
+
+    int hour = sim_hour();
+
+    switch (msg->type) {
+    case MK_RUNNING:
+        if (st[b][s] != ST_SENT) break;              /* duplicate */
+        st[b][s] = ST_RUNNING;
+        printf("h%4d: %-16s machine %d running (batch %d)\n",
+               hour, PLANT[s]->name, m + 1, batches[b].id);
+        record_start(rc, s, m, batches[b].id, hour);
+        if (s == TANK_STEP) {
+            printf("h%4d: batch %d is in tank %d\n",
+                   hour, batches[b].id, m + 1);
+            record_tank(rc, batches[b].id, m);
+        }
+        break;
+
+    case MK_IDLE:
+        if (st[b][s] != ST_RUNNING) break;           /* IDLE before RUNNING, or dup */
+        st[b][s] = ST_DONE;
+        current[s][m] = -1;
+        printf("h%4d: %-16s machine %d done (batch %d)\n",
+               hour, PLANT[s]->name, m + 1, batches[b].id);
+        record_done(rc, s);
+        if (s == TANK_STEP) {
+            tank_owner[m] = -1;                      /* tank is free again */
+            printf("h%4d: tank %d is free\n", hour, m + 1);
+        }
+        break;
+
+    case MK_ERROR:
+        st[b][s] = ST_FAILED;
+        failed[b] = 1;
+        current[s][m] = -1;
+        release_tanks_of(b);   /* assumes a failed batch leaves its tank empty */
+        fprintf(stderr, "h%4d: ERROR %s machine %d (batch %d): %s %s\n",
+                hour, PLANT[s]->name, m + 1, batches[b].id,
+                msg->error_code, msg->error_reason);
+        record_error(rc, s, m, batches[b].id,
+                     msg->error_code, msg->error_reason);
+        break;
+
+    default:
+        break;
+    }
+}
+
+/* Every batch is either finished or failed (a failed machine is freed on
+ * ERROR, so nothing is left in flight for a failed batch). */
+static int all_done(void)
+{
+    for (int b = 0; b < n; b++)
+        if (!failed[b] && st[b][NUM_STEPS - 1] != ST_DONE)
+            return 0;
+    return 1;
+}
+
 int main(int argc, char **argv)
 {
-    int n = (argc > 1) ? atoi(argv[1]) : DEFAULT_BATCHES;
+    n = (argc > 1) ? atoi(argv[1]) : DEFAULT_BATCHES;
     if (n < 1 || n > MAX_BATCHES) {
         fprintf(stderr, "batches must be 1..%d\n", MAX_BATCHES);
         return 1;
     }
+    if (TANK_STEP < 1 || TANK_STEP >= NUM_STEPS) {
+        fprintf(stderr, "TANK_STEP %d is out of range\n", TANK_STEP);
+        return 1;
+    }
 
     /* connect to Redis */
-    redisContext *rc = redis_connect();
+    rc = redis_connect();
     if (!rc) return 1;
     redis_reset(rc);
 
-    /* create every machine */
+    /* Local machine objects are only used to ask PLANT[s]->duration().
+     * They are never started or ticked: the real machines do that. */
     for (int s = 0; s < NUM_STEPS; s++) {
         if (PLANT[s]->count > MAX_MACHINES) {
             fprintf(stderr, "too many machines in step %d\n", s + 1);
@@ -126,24 +368,19 @@ int main(int argc, char **argv)
         }
     }
 
-    //batches
-    Batch batches[MAX_BATCHES];
+    // batches
     for (int i = 0; i < n; i++) {
         batches[i].id = i + 1;
         batches[i].release = i * RELEASE_INTERVAL;
     }
     qsort(batches, n, sizeof(Batch), cmp_release);
 
-     /* ---- greedy planning ----
+    /* ---- greedy planning ----
      * Take batches in release order. For each step, pick the machine that
-     * can start the batch earliest. Each machine reports its own duration. */
+     * can start the batch earliest. Each machine reports its own duration.
+     * The result is used for machine assignment and ordering only; real
+     * start times come from the machines' status messages. */
     int free_at[NUM_STEPS][MAX_MACHINES] = {{0}};
-
-    if (TANK_STEP >= NUM_STEPS) {
-        fprintf(stderr, "TANK_STEP %d is out of range\n", TANK_STEP);
-        redisFree(rc);
-        return 1;
-    }
 
     /* Two rules for starting a batch:
      *  1. the previous batch must already be in its tank, and
@@ -195,66 +432,76 @@ int main(int argc, char **argv)
         prev_in_tank = batches[b].start[TANK_STEP];
     }
 
-    printf("Tank assignment:\n");
+    printf("Planned tank assignment (real tanks are picked at run time):\n");
     for (int b = 0; b < n; b++)
-        printf("  batch %2d -> tank %d (enters at h%d)\n",
+        printf("  batch %2d -> tank %d (planned entry h%d)\n",
                batches[b].id, batches[b].tank + 1, batches[b].start[TANK_STEP]);
     printf("\n");
 
-    int makespan = 0;
+    int planned_makespan = 0;
     for (int b = 0; b < n; b++)
-        if (batches[b].end > makespan) makespan = batches[b].end;
+        if (batches[b].end > planned_makespan) planned_makespan = batches[b].end;
 
-    /* run the schedule */
-    for (int t = 0; t <= makespan; t++) {
+    /* ---- run-time state ---- */
+    for (int s = 0; s < NUM_STEPS; s++)
+        for (int m = 0; m < MAX_MACHINES; m++)
+            current[s][m] = -1;
+    for (int m = 0; m < MAX_MACHINES; m++)
+        tank_owner[m] = -1;
+    /* st[][] and failed[] are static, so already zero == ST_PENDING / 0 */
 
-        /* 1. Print machines that are done, record to Redis on the rising edge */
-        for (int s = 0; s < NUM_STEPS; s++)
-            for (int m = 0; m < PLANT[s]->count; m++) {
-                int d = PLANT[s]->done(machines[s][m]);
-                if (d) {
-                    printf("h%4d: %-16s machine %d done\n",
-                           t, PLANT[s]->name, m + 1);
-                    if (!was_done[s][m])
-                        record_done(rc, s);
-                }
-                was_done[s][m] = d ? 1 : 0;
-            }
-
-        /* 2. Start machines */
-        for (int b = 0; b < n; b++)
-            for (int s = 0; s < NUM_STEPS; s++)
-                if (batches[b].start[s] == t) {
-                    int m = batches[b].machine[s];
-                    PLANT[s]->add_batch(machines[s][m]);
-                    if (PLANT[s]->start(machines[s][m])) {
-                        printf("h%4d: %-16s machine %d start (batch %d)\n",
-                               t, PLANT[s]->name, m + 1, batches[b].id);
-                        was_done[s][m] = 0;
-                        record_start(rc, s, m, batches[b].id, t);
-                        if (s == TANK_STEP) {
-                            printf("h%4d: batch %d is in tank %d\n",
-                                   t, batches[b].id, m + 1);
-                            record_tank(rc, batches[b].id, m);
-                        }
-                    } else {
-                        printf("h%4d: ERROR %s machine %d busy (batch %d)\n",
-                               t, PLANT[s]->name, m + 1, batches[b].id);
-                    }
-                }
-
-        /* 3. One hour passes */
-        for (int s = 0; s < NUM_STEPS; s++)
-            for (int m = 0; m < PLANT[s]->count; m++)
-                PLANT[s]->tick(machines[s][m]);
+    /* ---- Kafka ---- */
+    prod = mk_producer_new(BROKERS);
+    rd_kafka_t *cons = mk_consumer_new(BROKERS, CONSUMER_GROUP,
+                                       STATUS_TOPIC_REGEX);
+    if (!prod || !cons) {
+        fprintf(stderr, "Kafka setup failed\n");
+        if (prod) mk_producer_close(prod);
+        if (cons) mk_consumer_close(cons);
+        redisFree(rc);
+        return 1;
     }
 
-    printf("\nMakespan: %d hours\n", makespan);
+    /* Joining a consumer group takes a few seconds. Poll before the first
+     * dispatch so an early RUNNING reply is not missed. current[][] is all
+     * -1 here, so on_status ignores everything received during warm-up. */
+    time_t warm = time(NULL);
+    while (time(NULL) - warm < WARMUP_S)
+        mk_poll(cons, on_status, NULL);
+
+    /* ---- run the schedule, driven by machine statuses ---- */
+    t0 = time(NULL);
+    int timed_out = 0;
+
+    while (!all_done()) {
+        if (time(NULL) - t0 >= RUN_TIMEOUT_S) { timed_out = 1; break; }
+
+        /* 1. Start everything that is allowed to start */
+        for (int b = 0; b < n; b++)
+            for (int s = 0; s < NUM_STEPS; s++)
+                if (can_start(b, s))
+                    send_start(b, s);
+
+        /* 2. Wait for a status message (blocks up to MK_POLL_TIMEOUT_MS) */
+        mk_poll(cons, on_status, NULL);
+    }
+
+    int nfailed = 0;
+    for (int b = 0; b < n; b++) nfailed += failed[b];
+
+    if (timed_out)
+        printf("\nTIMEOUT after %d s, some machines never finished\n",
+               RUN_TIMEOUT_S);
+    printf("\nPlanned makespan: %d hours, actual: %d hours, failed batches: %d\n",
+           planned_makespan, sim_hour(), nfailed);
+
+    mk_consumer_close(cons);
+    mk_producer_close(prod);
 
     for (int s = 0; s < NUM_STEPS; s++)
         for (int m = 0; m < PLANT[s]->count; m++)
             free(machines[s][m]);
 
     redisFree(rc);
-    return 0;
+    return (timed_out || nfailed) ? 1 : 0;
 }
