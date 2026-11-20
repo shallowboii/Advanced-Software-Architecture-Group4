@@ -36,9 +36,11 @@ enum MQTTErrors mqtt_result = MQTT_OK;
 /* Finish nonblocking TCP connection attempts within five seconds per address.
  */
 static int connect_broker(const char *host, const char *port) {
-  struct addrinfo hints = {0}, *addresses;
+  struct addrinfo hints = {0};
+  struct addrinfo *addresses;
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_STREAM;
+
   int error = getaddrinfo(host, port, &hints, &addresses);
   if (error != 0) {
     fprintf(stderr, "Broker address: %s\n", gai_strerror(error));
@@ -48,28 +50,34 @@ static int connect_broker(const char *host, const char *port) {
   int fd = -1;
   for (struct addrinfo *address = addresses; address != NULL;
        address = address->ai_next) {
+
     fd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
     if (fd < 0)
       continue;
+
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags >= 0 && fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0) {
       int connected = connect(fd, address->ai_addr, address->ai_addrlen);
       if (connected == 0)
         break;
+
       if (errno == EINPROGRESS) {
         struct pollfd event = {.fd = fd, .events = POLLOUT};
         int ready = poll(&event, 1, 5000);
         int socket_error = 0;
         socklen_t length = sizeof(socket_error);
+
         if (ready > 0 &&
             getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error, &length) == 0 &&
             socket_error == 0)
           break;
       }
     }
+
     close(fd);
     fd = -1;
   }
+
   freeaddrinfo(addresses);
   return fd;
 }

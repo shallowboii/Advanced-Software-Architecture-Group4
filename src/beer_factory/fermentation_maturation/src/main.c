@@ -2,6 +2,7 @@
 #include "mqtt.h"
 #include "tank.h"
 
+#include "args.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,14 +10,8 @@
 #include <unistd.h>
 
 int main(int argc, char **argv) {
-  if (argc != 2) {
-    fprintf(stderr, "Usage: %s <machine-number>\n", argv[0]);
-    return EXIT_FAILURE;
-  }
-
-  long machine_number = atoi(argv[1]);
-  if (machine_number < 0) {
-    printf("Machine number must be >= 0\n");
+  long machine_number;
+  if (!get_machine_number(argc, argv, &machine_number)) {
     return EXIT_FAILURE;
   }
 
