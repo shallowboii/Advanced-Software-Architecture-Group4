@@ -15,7 +15,7 @@ This is the whirlpooling machine in C, made from the Whirlpooling template in th
 | `src/whirlpooling.c`, `src/whirlpooling.h` | the machine (boiling style) |
 | `tests/test_whirlpooling.c` | tests for the machine |
 | `examples/demo.c` | runs one batch and prints what happens |
-| `src/main.c` | the controller: Kafka + ledger + stop/flush (+ optional MQTT heartbeat) |
+| `src/main.c` | the controller: Kafka (`machine_kafka`) (+ optional MQTT heartbeat) |
 
 ## How to run it
 
@@ -45,39 +45,25 @@ The Dockerfile is also meant as a template for the other machines: copy it to yo
 
 ## Controller (Kafka)
 
-| Kafka command (topic `whirlpooling`) | Whirlpool | Answer |
+Topic `machine.whirlpooling`, key = machine id. The machine handles only commands for its own id and skips everything else (statuses, including its own).
+
+| Command | Whirlpool | Answer |
 | --- | --- | --- |
-| `start B-7` | empty: ledger written, then runs for `duration_s` | `running`, later `done`, then `idle` |
-| `start B-7` again (any message id) | nothing (ledger: seen before) | the batch's last status again |
-| `start B-8` while running | nothing | `error BUSY` |
-| `stop` (any batch, or the running one) | stops, wort stays inside | `error STOPPED` (`NOT_RUNNING` if nothing runs) |
-| `flush B-7` (running or stopped) | wort discarded, vessel empty | `error FLUSHED`, then `idle` (`NOT_HERE` for another batch) |
-
-There is no resume after a stop; the way out is a flush. A stopped or flushed batch is recorded in the ledger, so a re-sent start never runs it again. After a crash the batch that was running is reported as `error INTERRUPTED`.
-
-Start parameter: `duration_s` (1 to 86400, default 3600); anything outside is refused with `error INVALID_PARAM`.
+| `start B-7` | runs for the default 1 h | `running`, then `idle` when done |
+| `stop`, `flush` | not handled yet | - |
 
 ### Run
 
-Kafka first:
+The controller needs librdkafka and MQTT-C, so on Windows run it in Linux (WSL or a container):
 
 ```bash
-(cd ../machine_commons/machine_kafka && docker compose up -d)
+TIME_SCALE=600 make run   # 1 h run = 6 s
 ```
-
-The controller needs librdkafka, cJSON and MQTT-C, so on Windows run it through the dev container (Git Bash):
-
-```bash
-TIME_SCALE=600 ../machine_commons/dev/run.sh make run   # 1 h run = 6 s
-```
-
-Send it work from the scheduler service (`backend/src/scheduling`) or by hand in the Kafka UI (<http://localhost:8080>, topic `whirlpooling`, Produce Message, key `1`; example JSON in the machine_kafka README).
 
 | Environment | Default | Meaning |
 | --- | --- | --- |
 | `KAFKA_BROKERS` | (required) | Kafka servers, e.g. `kafka:29092` |
 | `MACHINE_ID` | number in the machine name | Kafka `machine_id` |
-| `LEDGER_PATH` | `whirlpooling-<id>.ledger` | the ledger file; must survive restarts |
 | `MQTT_HOST`, `MQTT_PORT` | unset, 1883 | heartbeat broker; unset = no heartbeat |
 | `TIME_SCALE` | 1 | simulated seconds per real second |
 

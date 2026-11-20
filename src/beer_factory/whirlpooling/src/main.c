@@ -1,8 +1,7 @@
 /*
  * Whirlpooling controller: one thread, one loop that
- *   - takes start / stop / flush from Kafka (machine_kafka, topic
- *     "whirlpooling") and answers with idle / running / done / error; the
- *     ledger file makes sure a batch is never whirlpooled twice,
+ *   - takes commands from Kafka (machine_kafka, topic "machine.whirlpooling")
+ *     and answers with statuses on the same topic,
  *   - drives the whirlpool state machine (whirlpooling.c),
  *   - publishes an MQTT heartbeat every 2 s (machine_mqtt) if MQTT_HOST is set.
  *
@@ -12,14 +11,10 @@
  *   KAFKA_BROKERS  Kafka bootstrap servers, e.g. kafka:29092 (required).
  *   MACHINE_ID     Kafka machine_id; default: the number after the last '-'
  *                  of machine-name (whirlpooling-2 -> 2), otherwise 1.
- *   LEDGER_PATH    ledger file, default whirlpooling-<id>.ledger. Put it on a
- *                  volume: losing it removes the duplicate protection.
  *   MQTT_HOST      MQTT broker for the heartbeat; unset = no heartbeat.
  *   MQTT_PORT      default 1883.
  *   TIME_SCALE     simulated seconds per real second (default 1; 600 makes a
  *                  one-hour run take 6 s).
- *
- * Start parameters: duration_s (1..86400, default 3600).
  */
 #define _POSIX_C_SOURCE 200809L
 
@@ -40,8 +35,9 @@
 #include <unistd.h>
 
 #define MACHINE_TYPE "whirlpooling"
+#define TOPIC "machine." MACHINE_TYPE
+#define GROUP_ID_LEN 48 /* "whirlpooling-<id>", this machine's consumer group */
 #define HEARTBEAT_INTERVAL_MS 2000
-#define MAX_DURATION_S 86400.0
 
 static volatile sig_atomic_t stopping;
 
@@ -54,152 +50,56 @@ static void stop_controller(int signum) {
 
 typedef struct {
   int id;
-  mk_bus_t *bus;
-  mk_ledger_t ledger;
+  rd_kafka_t *producer;
+  rd_kafka_t *consumer;
   whirlpooling_t whirlpool;
   whirlpooling_batches_t batches;
-  mk_message_t current; /* the start of the batch in the vessel */
-  uint64_t now;         /* simulated seconds since startup */
-  int announced;        /* first idle sent */
+  char batch_id[MK_BATCH_LEN]; /* the batch in the vessel */
+  uint64_t now;                /* simulated seconds since startup */
 } controller_t;
 
-/* Not called "send": that is the POSIX socket function. */
-static void send_status(controller_t *c, mk_message_t *status) {
-  int result = mk_send(c->bus, status);
-  if (result != MK_OK) {
-    fprintf(stderr, "kafka: cannot send %s: %s\n", mk_type_name(status->type),
-            mk_result_name(result));
-    return;
-  }
-  printf("-> %s%s%s%s%s\n", mk_type_name(status->type),
-         status->batch_id[0] ? " " : "", status->batch_id,
-         status->error_code[0] ? " " : "", status->error_code);
-}
-
-static void handle_start(controller_t *c, const mk_message_t *start) {
+/* Sends a status about the batch in the vessel. */
+static void send_status(controller_t *c, mk_type_t type) {
   mk_message_t status;
-  int seen = mk_ledger_lookup(&c->ledger, start, &status);
-  if (seen < 0)
-    return;
-  if (seen == 1) { /* re-sent or redelivered: repeat, never run again */
-    printf("start %s seen before\n", start->batch_id);
-    send_status(c, &status);
-    return;
-  }
-  if (c->whirlpool.state != WHIRLPOOLING_WAIT) {
-    if (mk_ledger_refuse(&c->ledger, start, "BUSY", c->current.batch_id,
-                         &status) == MK_OK)
-      send_status(c, &status);
-    return;
-  }
-
-  double duration = WHIRLPOOLING_DURATION_SECONDS;
-  mk_param_get(start, "duration_s", &duration);
-  if (!(duration >= 1.0 && duration <= MAX_DURATION_S)) {
-    if (mk_ledger_refuse(&c->ledger, start, "INVALID_PARAM",
-                         "duration_s must be 1..86400", &status) == MK_OK)
-      send_status(c, &status);
-    return;
-  }
-
-  /* Write the ledger first; only then start the whirlpool. */
-  if (mk_ledger_accept(&c->ledger, start) != MK_OK) {
-    if (mk_make_error(&status, start, "LEDGER", "cannot write ledger") ==
-        MK_OK)
-      send_status(c, &status);
-    return;
-  }
-  c->batches.hot_wort_batches = 1; /* the kettle pumped the hot wort over */
-  whirlpooling_set_duration(&c->whirlpool, (uint64_t)duration);
-  if (whirlpooling_start(&c->whirlpool, c->now) != WHIRLPOOLING_STARTED) {
-    mk_make_error(&status, start, "WHIRLPOOL", "whirlpool refused to start");
-    mk_ledger_record(&c->ledger, &status);
-    send_status(c, &status);
-    return;
-  }
-  c->current = *start;
-  printf("Whirlpooling %s for %.0f s.\n", start->batch_id, duration);
-  mk_make_running(&status, start);
-  send_status(c, &status);
+  memset(&status, 0, sizeof(status));
+  status.type = type;
+  snprintf(status.machine_type, sizeof(status.machine_type), "%s",
+           MACHINE_TYPE);
+  status.machine_id = c->id;
+  memcpy(status.batch_id, c->batch_id, sizeof(status.batch_id));
+  // TODO(marton): message_id and ts_utc
+  mk_send(c->producer, TOPIC, &status);
 }
 
-static void handle_stop(controller_t *c, const mk_message_t *stop) {
-  mk_message_t status;
-  if (c->whirlpool.state != WHIRLPOOLING_WHIRLPOOL ||
-      (stop->batch_id[0] != '\0' &&
-       strcmp(stop->batch_id, c->current.batch_id) != 0)) {
-    if (mk_make_error(&status, stop, "NOT_RUNNING",
-                      "that batch is not running here") == MK_OK)
-      send_status(c, &status);
-    return;
-  }
-  whirlpooling_stop(&c->whirlpool);
-  printf("Stopped %s: whirlpool off, wort stays in the vessel.\n",
-         c->current.batch_id);
-  mk_make_error(&status, &c->current, "STOPPED",
-                "stopped by command; flush to empty the vessel");
-  mk_ledger_record(&c->ledger, &status); /* a re-sent start won't run it */
-  send_status(c, &status);
-}
-
-static void handle_flush(controller_t *c, const mk_message_t *flush) {
-  mk_message_t status;
-  if (c->whirlpool.state == WHIRLPOOLING_WAIT ||
-      strcmp(flush->batch_id, c->current.batch_id) != 0) {
-    if (mk_make_error(&status, flush, "NOT_HERE",
-                      "batch is not in this whirlpool") == MK_OK)
-      send_status(c, &status);
-    return;
-  }
-  whirlpooling_flush(&c->whirlpool);
-  printf("Flushed %s: wort discarded, vessel empty.\n", c->current.batch_id);
-  mk_make_error(&status, &c->current, "FLUSHED", "batch discarded");
-  mk_ledger_record(&c->ledger, &status);
-  send_status(c, &status);
-  mk_make_idle(&status, MACHINE_TYPE, c->id);
-  send_status(c, &status);
-}
-
-static void on_command(const mk_message_t *msg, void *user) {
-  controller_t *c = user;
+static void on_message(const mk_message_t *msg, void *opaque) {
+  controller_t *c = opaque;
   if (msg->machine_id != c->id)
     return; /* for another whirlpool */
-  printf("<- %s %s\n", mk_type_name(msg->type), msg->batch_id);
+
   switch (msg->type) {
   case MK_START:
-    handle_start(c, msg);
+    // TODO(marton): what to answer when the whirlpool is busy
+    // TODO(marton): start params (duration_s); the default run time is used
+    c->batches.hot_wort_batches = 1; /* the kettle pumped the hot wort over */
+    whirlpooling_start(&c->whirlpool, c->now);
+    memcpy(c->batch_id, msg->batch_id, sizeof(c->batch_id));
+    printf("Whirlpooling %s.\n", c->batch_id);
+    send_status(c, MK_RUNNING);
     break;
   case MK_STOP:
-    handle_stop(c, msg);
-    break;
   case MK_FLUSH:
-    handle_flush(c, msg);
+    // TODO(marton): handle MK_STOP / MK_FLUSH (or answer UNSUPPORTED)
     break;
   default:
-    break; /* mk_poll only delivers commands */
+    break; /* a status (also our own): only the scheduler handles those */
   }
-}
-
-/* Once the bus is ready: report batches cut off by the last crash, then
- * tell the scheduler the whirlpool is free. */
-static void announce(controller_t *c) {
-  mk_message_t status;
-  while (mk_ledger_next_interrupted(&c->ledger, &status))
-    send_status(c, &status);
-  mk_make_idle(&status, MACHINE_TYPE, c->id);
-  send_status(c, &status);
-  c->announced = 1;
 }
 
 static void finish_batch(controller_t *c) {
-  mk_message_t status;
-  printf("Whirlpooled %s.\n", c->current.batch_id);
-  mk_make_done(&status, &c->current);
-  mk_ledger_record(&c->ledger, &status); /* before sending */
-  send_status(c, &status);
+  printf("Whirlpooled %s.\n", c->batch_id);
   c->batches.clarified_wort_batches = 0; /* pumped to a tank */
-  mk_make_idle(&status, MACHINE_TYPE, c->id);
-  send_status(c, &status);
+  // TODO(marton): there is no MK_DONE; should this MK_IDLE carry batch_id?
+  send_status(c, MK_IDLE);
 }
 
 /* ---- MQTT heartbeat (optional) ------------------------------------------- */
@@ -385,52 +285,34 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
 
-  /* Ledger first (refuse to run without duplicate protection), then the bus.
-   * A Kafka broker that is down is not an error; the bus reconnects. */
-  char path[MK_PATH_LEN], client_id[48];
-  const char *ledger_env = getenv("LEDGER_PATH");
-  if (ledger_env != NULL)
-    snprintf(path, sizeof(path), "%s", ledger_env);
-  else
-    snprintf(path, sizeof(path), "whirlpooling-%d.ledger", c.id);
-  if (mk_ledger_open(&c.ledger, path, MACHINE_TYPE, c.id) != MK_OK) {
-    fprintf(stderr, "Ledger %s is unusable; refusing to start.\n", path);
-    return EXIT_FAILURE;
-  }
-  snprintf(client_id, sizeof(client_id), "%s-%d", MACHINE_TYPE, c.id);
-  const char *topics[] = {MACHINE_TYPE};
-  mk_config_t cfg = {.brokers = brokers,
-                     .client_id = client_id,
-                     .topics = topics,
-                     .n_topics = 1,
-                     .receive = MK_RECEIVE_COMMANDS};
-  c.bus = mk_open(&cfg);
-  if (c.bus == NULL)
-    return EXIT_FAILURE;
-  printf("Whirlpooling %d: Kafka %s, ledger %s, time x%g.\n", c.id, brokers,
-         path, time_scale);
+  /* Own consumer group per machine, so every machine reads the whole topic
+   * and keeps only the commands for its own id. */
+  char group_id[GROUP_ID_LEN];
+  snprintf(group_id, sizeof(group_id), "%s-%d", MACHINE_TYPE, c.id);
+  c.producer = mk_producer_new(brokers);
+  c.consumer = mk_consumer_new(brokers, group_id, TOPIC);
+  // TODO: error handling
+  // TODO(marton): send MK_IDLE on startup? (only once partitions are assigned)
+  printf("Whirlpooling %d: Kafka %s, topic %s, time x%g.\n", c.id, brokers,
+         TOPIC, time_scale);
 
   heartbeat_link_t hb;
   if (heartbeat_open(&hb, name) != 0) {
-    mk_close(c.bus, 1000);
+    mk_consumer_close(c.consumer);
+    mk_producer_close(c.producer);
     return EXIT_FAILURE;
   }
 
   struct timespec started;
   clock_gettime(CLOCK_MONOTONIC, &started);
-  int status = EXIT_SUCCESS;
   while (!stopping) {
     uint64_t elapsed_ms = elapsed_ms_since(&started);
     c.now = (uint64_t)((double)elapsed_ms * time_scale / 1000.0);
 
-    /* Waits up to 100 ms for commands; this is the loop's sleep. */
-    if (mk_poll(c.bus, 100, on_command, &c) == MK_ERR_FATAL) {
-      fprintf(stderr, "kafka: fatal error, exiting\n");
-      status = EXIT_FAILURE;
-      break;
-    }
-    if (!c.announced && mk_ready(c.bus))
-      announce(&c);
+    /* Waits up to MK_POLL_TIMEOUT_MS for a command; this is the loop's
+     * sleep. */
+    mk_poll(c.consumer, on_message, &c);
+    rd_kafka_poll(c.producer, 0); /* serve delivery reports */
 
     if (whirlpooling_update(&c.whirlpool, c.now) == WHIRLPOOLING_DONE)
       finish_batch(&c);
@@ -439,6 +321,7 @@ int main(int argc, char **argv) {
   }
 
   heartbeat_close(&hb);
-  mk_close(c.bus, 5000);
-  return status;
+  mk_consumer_close(c.consumer);
+  mk_producer_close(c.producer);
+  return EXIT_SUCCESS;
 }

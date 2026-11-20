@@ -11,8 +11,8 @@ LDLIBS ?=
 CORE := src/whirlpooling.c src/whirlpooling.h
 
 # ---- Controller (Kafka, optional MQTT heartbeat) ---------------------------
-# Needs librdkafka, cJSON and MQTT-C. On Windows run these targets through the
-# dev container: ../machine_commons/dev/run.sh make run
+# Needs librdkafka and MQTT-C. On Windows run these targets in Linux (WSL or
+# a container).
 KAFKA_COMMONS ?= ../machine_commons/machine_kafka
 MQTT_COMMONS ?= ../machine_commons/machine_mqtt
 # MQTT-C checkout (src/mqtt.c, src/mqtt_pal.c); the dev image sets it.
@@ -21,10 +21,10 @@ MQTT_C_DIR ?=
 MQTT_LIBS ?= -lmqttc
 
 PKG_CONFIG ?= pkg-config
-KAFKA_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags rdkafka libcjson 2>/dev/null)
-KAFKA_LIBS ?= $(shell $(PKG_CONFIG) --libs rdkafka libcjson 2>/dev/null || echo -lrdkafka -lcjson)
+KAFKA_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags rdkafka 2>/dev/null)
+KAFKA_LIBS ?= $(shell $(PKG_CONFIG) --libs rdkafka 2>/dev/null || echo -lrdkafka)
 
-KAFKA_SOURCES := $(addprefix $(KAFKA_COMMONS)/,message.c ledger.c bus.c)
+KAFKA_SOURCES := $(KAFKA_COMMONS)/machine_kafka.c
 KAFKA_HEADERS := $(KAFKA_COMMONS)/machine_kafka.h
 INCLUDES := -Isrc -I$(KAFKA_COMMONS) -I$(MQTT_COMMONS) $(KAFKA_CFLAGS)
 
@@ -66,7 +66,7 @@ build/mqtt_pal.o: $(MQTT_C_DIR)/src/mqtt_pal.c | build
 	$(CC) -std=gnu11 -O2 -w -I$(MQTT_COMMONS) -c $< -o $@
 
 build/whirlpooling: src/main.c $(CORE) $(MQTT_COMMONS)/heartbeat.c $(MQTT_COMMONS)/heartbeat.h $(KAFKA_SOURCES) $(KAFKA_HEADERS) $(MQTT_OBJS) | build
-	$(CC) $(CPPFLAGS) $(INCLUDES) $(CFLAGS) src/main.c src/whirlpooling.c $(MQTT_COMMONS)/heartbeat.c $(KAFKA_SOURCES) $(MQTT_OBJS) $(LDFLAGS) $(MQTT_LINK) $(KAFKA_LIBS) -lm $(LDLIBS) -pthread -o $@
+	$(CC) $(CPPFLAGS) $(INCLUDES) $(CFLAGS) src/main.c src/whirlpooling.c $(MQTT_COMMONS)/heartbeat.c $(KAFKA_SOURCES) $(MQTT_OBJS) $(LDFLAGS) $(MQTT_LINK) $(KAFKA_LIBS) $(LDLIBS) -pthread -o $@
 
 controller: build/whirlpooling
 
