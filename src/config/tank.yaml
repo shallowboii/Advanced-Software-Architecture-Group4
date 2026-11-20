@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tank-deployment
+spec:
+  replicas: 24
+  selector:
+    matchLabels:
+      app: tank
+  template:
+    metadata:
+      labels:
+        app: tank
+    spec:
+      containers:
+      - name: tank
+        image: <your-dockerhub-username>/my-node-app:latest

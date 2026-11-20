@@ -16,7 +16,7 @@ static void test_start_guards(void)
     boiling_batches_t batches = { 0, 0 };
     boiling_t boiling;
 
-    CHECK(boiling_init(&boiling, &batches) == BOILING_OK);
+    boiling_init(&boiling, &batches);
     CHECK(boiling.state == BOILING_WAIT);
     CHECK(boiling_start(&boiling, 10) == BOILING_NO_SWEET_WORT);
     CHECK(boiling.state == BOILING_WAIT);
@@ -42,8 +42,8 @@ static void test_deadline_and_single_completion(void)
     boiling_batches_t batches = { 1, 0 };
     boiling_t boiling;
 
-    CHECK(boiling_init(&boiling, &batches) == BOILING_OK);
-    CHECK(boiling_update(&boiling, 100) == BOILING_NO_CHANGE);
+    boiling_init(&boiling, &batches);
+    CHECK(boiling_update(&boiling, 100) == BOILING_INVALID_ARGUMENT);
     CHECK(boiling_start(&boiling, 100) == BOILING_STARTED);
     CHECK(boiling_update(&boiling, 100) == BOILING_NO_CHANGE);
     CHECK(boiling_update(&boiling, 3699) == BOILING_NO_CHANGE);
@@ -51,8 +51,8 @@ static void test_deadline_and_single_completion(void)
     CHECK(boiling_update(&boiling, 3700) == BOILING_DONE);
     CHECK(boiling.state == BOILING_WAIT);
     CHECK(batches.sweet_wort_batches == 0 && batches.hot_wort_batches == 1);
-    CHECK(boiling_update(&boiling, 3700) == BOILING_NO_CHANGE);
-    CHECK(boiling_update(&boiling, 9000) == BOILING_NO_CHANGE);
+    CHECK(boiling_update(&boiling, 3700) == BOILING_INVALID_ARGUMENT);
+    CHECK(boiling_update(&boiling, 9000) == BOILING_INVALID_ARGUMENT);
     CHECK(batches.hot_wort_batches == 1);
 }
 
@@ -61,7 +61,7 @@ static void test_late_update_and_next_batch(void)
     boiling_batches_t batches = { 2, 0 };
     boiling_t boiling;
 
-    CHECK(boiling_init(&boiling, &batches) == BOILING_OK);
+    boiling_init(&boiling, &batches);
     CHECK(boiling_start(&boiling, 0) == BOILING_STARTED);
     CHECK(boiling_update(&boiling, 4000) == BOILING_DONE);
     CHECK(boiling_start(&boiling, 4000) == BOILING_OUTPUT_FULL);
@@ -79,11 +79,7 @@ static void test_invalid_time_does_not_change_state(void)
     boiling_batches_t batches = { 1, 0 };
     boiling_t boiling;
 
-    CHECK(boiling_init(&boiling, &batches) == BOILING_OK);
-    CHECK(boiling_update(&boiling, 100) == BOILING_NO_CHANGE);
-    CHECK(boiling_start(&boiling, 99) == BOILING_INVALID_TIME);
-    CHECK(boiling_start(&boiling, UINT64_MAX) == BOILING_INVALID_TIME);
-    CHECK(boiling.state == BOILING_WAIT && batches.sweet_wort_batches == 1);
+    boiling_init(&boiling, &batches);
     CHECK(boiling_start(&boiling, 100) == BOILING_STARTED);
     CHECK(boiling_update(&boiling, 200) == BOILING_NO_CHANGE);
     CHECK(boiling_update(&boiling, 199) == BOILING_INVALID_TIME);
@@ -99,22 +95,19 @@ static void test_invalid_time_does_not_change_state(void)
     CHECK(boiling_update(&boiling, UINT64_MAX) == BOILING_DONE);
 }
 
-static void test_invalid_arguments(void)
+static void test_initialization_and_large_timestamps(void)
 {
-    boiling_batches_t batches = { 1, 2 };
+    boiling_batches_t batches = { 1, 0 };
     boiling_t boiling;
 
-    CHECK(boiling_init(NULL, &batches) == BOILING_INVALID_ARGUMENT);
-    CHECK(boiling_init(&boiling, NULL) == BOILING_INVALID_ARGUMENT);
-    CHECK(boiling_init(&boiling, &batches) == BOILING_INVALID_ARGUMENT);
-    CHECK(boiling_start(NULL, 0) == BOILING_INVALID_ARGUMENT);
-    CHECK(boiling_update(NULL, 0) == BOILING_INVALID_ARGUMENT);
-    batches.hot_wort_batches = 0;
-    CHECK(boiling_init(&boiling, &batches) == BOILING_OK);
-    CHECK(boiling_start(&boiling, 0) == BOILING_STARTED);
-    batches.hot_wort_batches = 1; /* Violates the sole-producer contract. */
-    CHECK(boiling_update(&boiling, 3600) == BOILING_INVALID_ARGUMENT);
-    CHECK(boiling.state == BOILING_BOIL && batches.hot_wort_batches == 1);
+    boiling_init(&boiling, &batches);
+    CHECK(boiling.state == BOILING_WAIT);
+    CHECK(boiling.batches == &batches);
+    CHECK(boiling.started_at_seconds == 0 && boiling.last_time_seconds == 0);
+    CHECK(boiling_update(&boiling, 0) == BOILING_INVALID_ARGUMENT);
+    CHECK(boiling_start(&boiling, UINT64_MAX) == BOILING_STARTED);
+    CHECK(boiling_update(&boiling, UINT64_MAX) == BOILING_NO_CHANGE);
+    CHECK(batches.hot_wort_batches == 0);
 }
 
 int main(void)
@@ -123,7 +116,7 @@ int main(void)
     test_deadline_and_single_completion();
     test_late_update_and_next_batch();
     test_invalid_time_does_not_change_state();
-    test_invalid_arguments();
+    test_initialization_and_large_timestamps();
     puts("All boiling tests passed.");
     return EXIT_SUCCESS;
 }

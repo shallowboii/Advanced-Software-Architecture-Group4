@@ -2,19 +2,15 @@
 
 #include "mqtt.h"
 
-#define MAX_MACHINE_NAME_LEN 32
-
 typedef struct {
   int timestamp;
-  char machine_name[MAX_MACHINE_NAME_LEN];
+  int machine_idx;
 } machine_heartbeat_t;
 
-enum MQTTErrors heartbeat_init(struct mqtt_client *client,
-                               mqtt_pal_socket_handle socketfd,
-                               uint8_t *sendbuf, size_t sendbufsz,
-                               uint8_t *recvbuf, size_t recvbufsz,
-                               const char *client_id);
-
-machine_heartbeat_t heartbeat_make(const char *machine_name);
-enum MQTTErrors heartbeat_send(struct mqtt_client *client,
-                               machine_heartbeat_t hb);
+// Machine prefix is something like "BOILING" or "FERMENTATION" etc...
+// It will form the machine id, like -> "%MACHINE_PREFIX%-%MACHINE_IDX%"
+enum MQTTErrors *heartbeat_init(char *machine_prefix, int machine_idx);
+enum MQTTErrors *heartbeat_update(const char *topic, uint64_t now_s);
+enum MQTTErrors *heartbeat_sync(void);
+void heartbeat_destroy(void);
+enum MQTTErrors *heartbeat_status(void);

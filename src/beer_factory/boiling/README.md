@@ -1,46 +1,62 @@
-# Boiling with MQTT heartbeats
+# Boiling controller tests
 
-The MQTT controller runs one normal one-hour batch, then waits. It publishes
-the machine name and current Unix timestamp on `heartbeat` at QoS 1 every two
-real seconds, during both boiling and waiting. Boiling uses monotonic time;
-the existing state-machine API is unchanged.
+Run the state-machine and controller tests:
 
-Build with an installed MQTT-C library:
+```sh
+make test
+```
+
+The state-machine tests cover initialization, start guards, the one-hour
+boundary, single completion, subsequent batches, backward time, and large
+timestamps. Calls require valid pointers and batch counters.
+
+The controller tests compile the real controller and state machine against
+heartbeat and clock doubles. They advance simulated time past one hour without
+sleeping or connecting to a broker. They check the numeric machine argument,
+usage errors, five-second heartbeat scheduling on `boiling`, continued boiling
+after heartbeat failures, and cleanup after a clock failure. Run them separately
+with `make test-controller`. Python 3 is required.
+
+The test build suppresses strict-prototype warnings from the shared heartbeat
+header, whose no-argument declarations currently use `()` rather than `(void)`.
+Production build flags remain unchanged.
+
+Build the MQTT controller with an installed MQTT-C library:
 
 ```sh
 make mqtt
 ```
 
-Or supply a local MQTT-C checkout (containing `src/mqtt.c` and `src/mqtt_pal.c`):
+Or supply a local MQTT-C checkout containing `src/mqtt.c` and `src/mqtt_pal.c`:
 
 ```sh
 make mqtt MQTT_C_DIR=/path/to/MQTT-C
 ```
 
-Start your broker, then run:
+Run with a machine number:
 
 ```sh
-./build/boiling-mqtt                         # localhost:1883, boiling-1
-./build/boiling-mqtt 127.0.0.1 1883 kettle-2 # custom broker and machine name
+./build/boiling-mqtt 7
 ```
 
-Each machine needs a unique name of 1–31 bytes. The binary heartbeat payload
-comes from `../machine_mqtt`; this connection uses no authentication or TLS.
+The controller passes this number to the shared heartbeat service in
+`../machine_commons/machine_mqtt`. The broker is fixed to `localhost:1883`.
+The controller uses `atoi`; it currently does not reject malformed numeric
+arguments. SIGTERM and Ctrl-C use the default signal handlers.
 
-Press Ctrl-C to disconnect and exit. A failed initial broker connection stops
-startup; a connection lost after startup is reported and heartbeat publishing
-stops, while boiling continues. Automatic reconnection is not implemented.
-
-Run the protocol integration tests without installing a broker:
+Run the real MQTT protocol tests with port 1883 free (stop any local broker):
 
 ```sh
 make test-mqtt MQTT_C_DIR=/path/to/MQTT-C
 ```
 
-Tests use a local MQTT test peer to check CONNECT, heartbeat payloads, QoS 1
-acknowledgements, two-second timing, clean shutdown, and continued operation
-after broker loss. Python 3 is required.
+These tests start a local protocol peer and check the expected `BOILING-7`
+client identity and heartbeat payload, the `boiling` topic, QoS 1, five-second
+spacing, and continued operation after broker loss. They terminate the
+controller with SIGTERM; graceful MQTT disconnect is not expected.
 
-The pre-existing `make all`/`make demo` targets reference a missing
-`examples/demo.c`, and `make test` expects an older boiling API. The MQTT
-targets build independently of those targets.
+The real MQTT build is currently blocked: the shared header declares
+`heartbeat_init(int)` but its implementation defines `heartbeat_init(char *)`.
+The shared code also triggers strict-prototype warnings with the default
+compiler flags. The controller doubles do not exercise that implementation
+or verify its machine-name formatting.

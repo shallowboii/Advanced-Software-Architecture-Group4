@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: boiling-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: boiling
+  template:
+    metadata:
+      labels:
+        app: boiling
+    spec:
+      containers:
+      - name: boiling
+        image: <your-dockerhub-username>/my-node-app:latest

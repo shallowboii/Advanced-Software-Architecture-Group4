@@ -1,0 +1,62 @@
+[
+  {
+    "file": "src/main.c",
+    "arguments": [
+      "/usr/bin/cc",
+      "-Isrc",
+      "-I../machine_commons/machine_mqtt",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-O2",
+      "src/main.c",
+      "-pthread",
+      "-o",
+      "build/boiling-mqtt"
+    ],
+    "directory": "/Users/nicola/Workspace/Advanced-Software-Architecture-Group4/src/beer_factory/boiling",
+    "output": "build/boiling-mqtt"
+  },
+  {
+    "file": "src/boiling.c",
+    "arguments": [
+      "/usr/bin/cc",
+      "-Isrc",
+      "-I../machine_commons/machine_mqtt",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-O2",
+      "src/boiling.c",
+      "-pthread",
+      "-o",
+      "build/boiling-mqtt"
+    ],
+    "directory": "/Users/nicola/Workspace/Advanced-Software-Architecture-Group4/src/beer_factory/boiling",
+    "output": "build/boiling-mqtt"
+  },
+  {
+    "file": "../machine_commons/machine_mqtt/heartbeat.c",
+    "arguments": [
+      "/usr/bin/cc",
+      "-Isrc",
+      "-I../machine_commons/machine_mqtt",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-O2",
+      "../machine_commons/machine_mqtt/heartbeat.c",
+      "-pthread",
+      "-o",
+      "build/boiling-mqtt"
+    ],
+    "directory": "/Users/nicola/Workspace/Advanced-Software-Architecture-Group4/src/beer_factory/boiling",
+    "output": "build/boiling-mqtt"
+  }
+]

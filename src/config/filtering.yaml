@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: filtering-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: filtering
+  template:
+    metadata:
+      labels:
+        app: filtering
+    spec:
+      containers:
+      - name: filtering
+        image: <your-dockerhub-username>/my-node-app:latest

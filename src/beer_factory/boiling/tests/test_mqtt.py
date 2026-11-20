@@ -1,9 +1,13 @@
-"""Exercise the controller against a small local MQTT protocol test peer."""
+"""Check a machine's MQTT heartbeats with a protocol peer on localhost:1883.
+
+Stop any local broker before running. The heartbeat payload uses the shared
+library's native pair of integers: Unix timestamp and machine index.
+"""
+import argparse
 import signal
 import socket
 import struct
 import subprocess
-import sys
 import time
 
 
@@ -28,13 +32,16 @@ def read_packet(connection):
     raise AssertionError("Invalid MQTT remaining length")
 
 
-def run(binary, disconnect=False):
+def run(binary, machine="boiling", disconnect=False):
+    expected_id = (machine.upper() + "-7").encode()
+    expected_topic = machine.encode()
     with socket.socket() as listener:
-        listener.bind(("127.0.0.1", 0))
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", 1883))
         listener.listen(1)
         listener.settimeout(8)
         process = subprocess.Popen(
-            [binary, "127.0.0.1", str(listener.getsockname()[1]), "test-boiling"],
+            [binary, "7"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         try:
@@ -46,20 +53,20 @@ def run(binary, disconnect=False):
                 assert body[:7] == b"\x00\x04MQTT\x04"
                 assert body[7] == 2  # Clean session, no will or authentication.
                 assert struct.unpack("!H", body[8:10])[0] == 60
-                assert body[12:] == b"test-boiling"
+                assert body[12:] == expected_id
                 connection.sendall(b"\x20\x02\x00\x00")
 
                 arrivals = []
-                for _ in range(1 if disconnect else 3):
+                for _ in range(1 if disconnect else 2):
                     header, body = read_packet(connection)
                     assert header == 0x32  # PUBLISH, QoS 1, no retain.
                     topic_size = struct.unpack("!H", body[:2])[0]
-                    assert body[2:2 + topic_size] == b"heartbeat"
+                    assert body[2:2 + topic_size] == expected_topic
                     offset = 2 + topic_size
                     packet_id = body[offset:offset + 2]
-                    timestamp, name = struct.unpack("@i32s", body[offset + 2:])
+                    timestamp, machine_idx = struct.unpack("@ii", body[offset + 2:])
                     assert abs(timestamp - time.time()) < 5
-                    assert name.rstrip(b"\0") == b"test-boiling"
+                    assert machine_idx == 7
                     arrivals.append(time.monotonic())
                     connection.sendall(b"\x40\x02" + packet_id)
 
@@ -67,22 +74,20 @@ def run(binary, disconnect=False):
                     connection.shutdown(socket.SHUT_RDWR)
                 else:
                     for before, after in zip(arrivals, arrivals[1:]):
-                        assert 1.7 <= after - before <= 3.0
+                        assert 4.0 <= after - before <= 7.0
                     process.send_signal(signal.SIGTERM)
-                    header, body = read_packet(connection)
-                    assert header == 0xE0 and body == b""
 
             if disconnect:
-                time.sleep(0.5)
-                assert process.poll() is None, "Broker loss stopped boiling"
+                time.sleep(2)
+                assert process.poll() is None, "Broker loss stopped the machine"
                 process.send_signal(signal.SIGTERM)
             stdout, stderr = process.communicate(timeout=5)
-            assert process.returncode == 0, stderr
-            assert "Boiling started." in stdout
-            assert "Boiling complete" not in stdout  # No acceleration of the hour.
-            if disconnect:
-                assert "boiling continues" in stderr
-            else:
+            assert process.returncode == -signal.SIGTERM, stderr
+            # The hourly processes must not finish during this short MQTT test.
+            if machine in {"boiling", "fermentation_maturation"}:
+                assert "complete" not in stdout
+            # SIGTERM uses the default handler; stdout may still be buffered.
+            if not disconnect:
                 assert stderr == "", stderr
         finally:
             if process.poll() is None:
@@ -91,11 +96,20 @@ def run(binary, disconnect=False):
 
 
 if __name__ == "__main__":
-    run(sys.argv[1])
-    run(sys.argv[1], disconnect=True)
-    invalid = subprocess.run(
-        [sys.argv[1], "127.0.0.1", "1883", "x" * 32],
-        capture_output=True, text=True, timeout=5,
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("binary", help="Path to the machine executable")
+    parser.add_argument(
+        "--machine", default="boiling",
+        choices=["boiling", "fermentation_maturation", "mashing", "lautering",
+                 "filtering", "whirlpooling"],
+        help="Machine type used for the client ID and topic (default: boiling)",
     )
-    assert invalid.returncode != 0 and "1 to 31 bytes" in invalid.stderr
-    print("Boiling MQTT integration tests passed.")
+    args = parser.parse_args()
+    run(args.binary, args.machine)
+    run(args.binary, args.machine, disconnect=True)
+    for invalid_args in [[], ["1", "2"]]:
+        invalid = subprocess.run(
+            [args.binary, *invalid_args], capture_output=True, text=True, timeout=5,
+        )
+        assert invalid.returncode != 0 and "<machine-number>" in invalid.stderr
+    print(f"{args.machine}: MQTT integration tests passed.")
