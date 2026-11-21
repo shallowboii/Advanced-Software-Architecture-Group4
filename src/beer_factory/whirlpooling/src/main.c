@@ -64,8 +64,8 @@ static void send_status(controller_t *c, kafka_type_t type) {
   kafka_send(c->producer, TOPIC, &status);
 }
 
-static void on_message(const kafka_message_t *msg, void *opaque) {
-  controller_t *c = opaque;
+static void on_message(const kafka_message_t *msg, void *context) {
+  controller_t *c = context;
   if (msg->machine_id != c->id)
     return; /* for another whirlpool */
 

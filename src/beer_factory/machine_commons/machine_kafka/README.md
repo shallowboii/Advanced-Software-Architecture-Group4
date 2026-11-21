@@ -26,10 +26,10 @@ The library only covers the happy path for now. Places that still need work are 
 | `kafka_send(producer, topic, &msg)` | queues `msg` on `topic` with key `msg.machine_id` |
 | `kafka_producer_close(producer)` | waits up to 10 s for outstanding messages, then frees the producer |
 | `kafka_consumer_new(brokers, group_id, topic)` | creates a consumer subscribed to one topic |
-| `kafka_poll(consumer, handler, opaque)` | waits up to 100 ms for one message, calls `handler(&msg, opaque)`, then commits. Returns 1 if it handled a message, 0 if none came |
+| `kafka_poll(consumer, handler, context)` | waits up to 100 ms for one message, calls `handler(&msg, context)`, then commits. Returns 1 if it handled a message, 0 if none came |
 | `kafka_consumer_close(consumer)` | leaves the group and frees the consumer |
 
-`opaque` is passed through to your handler unchanged. Use it to reach your own state without globals.
+`context` is passed through to your handler unchanged. Use it to reach your own state without globals.
 
 Every participant needs one producer and one consumer, because a librdkafka handle is either one or the other. Each machine instance needs its **own** `group_id` (e.g. `whirlpooling-1`) so that it reads the whole topic. If instances shared a group, Kafka would split the partitions between them, and a machine could miss its own commands.
 
@@ -40,8 +40,8 @@ Every participant needs one producer and one consumer, because a librdkafka hand
 From `whirlpooling/src/main.c`, shortened:
 
 ```c
-static void on_message(const kafka_message_t *msg, void *opaque) {
-  controller_t *c = opaque;
+static void on_message(const kafka_message_t *msg, void *context) {
+  controller_t *c = context;
   if (msg->machine_id != c->id)
     return;                          /* for another machine */
   switch (msg->type) {
@@ -80,8 +80,8 @@ This is a complete program. It sends one start to whirlpooling 1 and prints the 
 #define WARMUP_POLLS 60  /* ~6 s: let the group assign partitions first */
 #define LISTEN_POLLS 150 /* ~15 s: wait for the answers */
 
-static void on_message(const kafka_message_t *msg, void *opaque) {
-  (void)opaque;
+static void on_message(const kafka_message_t *msg, void *context) {
+  (void)context; /* not used */
   if (msg->type == KAFKA_START || msg->type == KAFKA_STOP ||
       msg->type == KAFKA_FLUSH)
     return; /* our own command */
