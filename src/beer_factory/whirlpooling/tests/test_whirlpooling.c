@@ -120,6 +120,50 @@ static void test_invalid_arguments(void) {
   CHECK(whirlpooling_update(NULL, 0) == WHIRLPOOLING_INVALID_ARGUMENT);
 }
 
+static void test_duration(void) {
+  whirlpooling_batches_t batches = {1, 0};
+  whirlpooling_t w;
+
+  CHECK(whirlpooling_init(&w, &batches) == WHIRLPOOLING_OK);
+  CHECK(whirlpooling_set_duration(&w, 0) == WHIRLPOOLING_INVALID_ARGUMENT);
+  CHECK(whirlpooling_set_duration(&w, 1800) == WHIRLPOOLING_OK);
+  CHECK(whirlpooling_start(&w, 0) == WHIRLPOOLING_STARTED);
+  CHECK(whirlpooling_set_duration(&w, 60) == WHIRLPOOLING_BUSY);
+  CHECK(whirlpooling_update(&w, 1799) == WHIRLPOOLING_NO_CHANGE);
+  CHECK(whirlpooling_update(&w, 1800) == WHIRLPOOLING_DONE);
+  CHECK(whirlpooling_start(&w, UINT64_MAX) == WHIRLPOOLING_INVALID_TIME);
+}
+
+static void test_stop_and_flush(void) {
+  whirlpooling_batches_t batches = {2, 0};
+  whirlpooling_t w;
+
+  CHECK(whirlpooling_init(&w, &batches) == WHIRLPOOLING_OK);
+  CHECK(whirlpooling_stop(&w) == WHIRLPOOLING_NOT_RUNNING);
+  CHECK(whirlpooling_flush(&w) == WHIRLPOOLING_NOT_RUNNING);
+
+  /* Stop: nothing is produced, the vessel stays occupied. */
+  CHECK(whirlpooling_start(&w, 0) == WHIRLPOOLING_STARTED);
+  CHECK(whirlpooling_stop(&w) == WHIRLPOOLING_OK);
+  CHECK(w.state == WHIRLPOOLING_STOPPED);
+  CHECK(whirlpooling_stop(&w) == WHIRLPOOLING_NOT_RUNNING);
+  CHECK(whirlpooling_update(&w, 9999) == WHIRLPOOLING_NO_CHANGE);
+  CHECK(batches.clarified_wort_batches == 0);
+  CHECK(whirlpooling_start(&w, 9999) == WHIRLPOOLING_BUSY);
+
+  /* Flush: the stopped batch is discarded, the vessel is free again. */
+  CHECK(whirlpooling_flush(&w) == WHIRLPOOLING_OK);
+  CHECK(w.state == WHIRLPOOLING_WAIT && batches.clarified_wort_batches == 0);
+  CHECK(whirlpooling_flush(&w) == WHIRLPOOLING_NOT_RUNNING);
+
+  /* A running batch can be flushed directly too. */
+  CHECK(whirlpooling_start(&w, 10000) == WHIRLPOOLING_STARTED);
+  CHECK(whirlpooling_flush(&w) == WHIRLPOOLING_OK);
+  CHECK(w.state == WHIRLPOOLING_WAIT && batches.hot_wort_batches == 0);
+  CHECK(whirlpooling_stop(NULL) == WHIRLPOOLING_INVALID_ARGUMENT);
+  CHECK(whirlpooling_flush(NULL) == WHIRLPOOLING_INVALID_ARGUMENT);
+}
+
 int main(void) {
   test_start_guards();
   test_no_output_limit();
@@ -127,6 +171,8 @@ int main(void) {
   test_late_update_and_next_batch();
   test_invalid_time_does_not_change_state();
   test_invalid_arguments();
+  test_duration();
+  test_stop_and_flush();
   puts("whirlpooling: all core tests passed");
   return EXIT_SUCCESS;
 }
