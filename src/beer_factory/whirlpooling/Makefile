@@ -10,7 +10,40 @@ LDLIBS ?=
 
 CORE := src/whirlpooling.c src/whirlpooling.h
 
-.PHONY: all demo test clean
+# ---- Controller (Kafka + MQTT heartbeat) -----------------------------------
+# Needs librdkafka and MQTT-C, so build it on Linux (WSL or a container).
+KAFKA_COMMONS ?= ../machine_commons/machine_kafka
+MQTT_COMMONS ?= ../machine_commons/machine_mqtt
+MQTT_C_DIR ?=
+MQTT_LIBS ?= -lmqttc
+
+PKG_CONFIG ?= pkg-config
+KAFKA_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags rdkafka 2>/dev/null)
+KAFKA_LIBS ?= $(shell $(PKG_CONFIG) --libs rdkafka 2>/dev/null || echo -lrdkafka)
+
+# Use an installed MQTT-C library, or compile a checkout supplied by MQTT_C_DIR.
+ifneq ($(strip $(MQTT_C_DIR)),)
+MQTT_SOURCES = $(MQTT_C_DIR)/src/mqtt.c $(MQTT_C_DIR)/src/mqtt_pal.c
+MQTT_CPPFLAGS = -I$(MQTT_C_DIR)/include
+MQTT_LINK =
+else
+MQTT_SOURCES =
+MQTT_LINK = $(MQTT_LIBS)
+endif
+
+# heartbeat.c uses getaddrinfo, which -std=c11 hides without this.
+POSIX_CPPFLAGS := -D_POSIX_C_SOURCE=200809L
+
+CONTROLLER_SOURCES := src/main.c src/whirlpooling.c \
+	$(MQTT_COMMONS)/heartbeat.c $(KAFKA_COMMONS)/machine_kafka.c $(MQTT_SOURCES)
+CONTROLLER_HEADERS := src/whirlpooling.h $(MQTT_COMMONS)/heartbeat.h \
+	$(MQTT_COMMONS)/mqtt.h $(MQTT_COMMONS)/mqtt_pal.h \
+	$(KAFKA_COMMONS)/machine_kafka.h
+
+KAFKA_BROKERS ?= localhost:9092
+MACHINE_ID ?= 1
+
+.PHONY: all demo test controller run clean
 
 all: build/whirlpooling
 
@@ -29,22 +62,16 @@ demo: build/whirlpooling-demo
 test: build/test-whirlpooling
 	./build/test-whirlpooling
 
+build/whirlpooling: $(CONTROLLER_SOURCES) $(CONTROLLER_HEADERS) | build
+	$(CC) $(CPPFLAGS) $(POSIX_CPPFLAGS) -Isrc -I$(KAFKA_COMMONS) -I$(MQTT_COMMONS) $(MQTT_CPPFLAGS) $(KAFKA_CFLAGS) $(CFLAGS) $(CONTROLLER_SOURCES) $(LDFLAGS) $(MQTT_LINK) $(KAFKA_LIBS) $(LDLIBS) -pthread -o $@
+
+controller: build/whirlpooling
+
+# The controller, talking to Kafka at KAFKA_BROKERS. The MQTT heartbeat goes
+# to localhost:1883 (fixed in heartbeat.c); without a broker there it only
+# prints a warning and keeps running.
+run: build/whirlpooling
+	KAFKA_BROKERS=$(KAFKA_BROKERS) ./build/whirlpooling whirlpooling-$(MACHINE_ID)
+
 clean:
 	rm -rf build
-
-MQTT_COMMONS ?= ../machine_commons/machine_mqtt
-MQTT_C_DIR ?=
-MQTT_LIBS ?= -lmqttc
-
-# Use an installed MQTT-C library, or compile a checkout supplied by MQTT_C_DIR.
-ifneq ($(strip $(MQTT_C_DIR)),)
-MQTT_SOURCES = $(MQTT_C_DIR)/src/mqtt.c $(MQTT_C_DIR)/src/mqtt_pal.c
-MQTT_CPPFLAGS = -I$(MQTT_C_DIR)/include
-MQTT_LINK =
-else
-MQTT_SOURCES =
-MQTT_LINK = $(MQTT_LIBS)
-endif
-
-build/whirlpooling: src/main.c $(MQTT_COMMONS)/heartbeat.c $(MQTT_COMMONS)/heartbeat.h $(MQTT_COMMONS)/mqtt.h $(MQTT_COMMONS)/mqtt_pal.h $(MQTT_SOURCES) | build
-	$(CC) $(CPPFLAGS) -Isrc -I$(MQTT_COMMONS) $(MQTT_CPPFLAGS) $(CFLAGS) src/main.c $(MQTT_COMMONS)/heartbeat.c $(MQTT_SOURCES) $(LDFLAGS) $(MQTT_LINK) $(LDLIBS) -pthread -o $@
