@@ -3,77 +3,80 @@
 <nta>
 	<declaration>// Place global declarations here.
 
-// We need this because the next machine can only keep one hot wort batch
-const int MAX_HOT_WORT_BATCHES = 1;
+// Buffer capacities between brewhouse stages
 const int MAX_WORT_BATCHES = 1;
 const int MAX_SWEET_WORT_BATCHES = 1;
+const int MAX_HOT_WORT_BATCHES = 1;
 const int MAX_CLARIFIED_WORT_BATCHES = 1;
 const int MAX_TANKS = 6;
 
-// Lautering channels
-urgent chan start_lauter;
-broadcast chan done_lauter;
-int wort_batches = 0;
+// Stage durations (hours)
+const int T_MASHING = 2;        // FR-10.1
+const int T_LAUTER = 2;
+const int T_BOILING = 1;        // FR-10
+const int T_WHIRLPOOLING = 1;   // FR-10.4
+const int T_FILTERING = 4;
+const int FERMENTATION_TIME = 120;
+const int MATURATION_TIME = 216;
+const int TIME_LEFT_LIMIT = T_MASHING + T_LAUTER + T_BOILING + T_WHIRLPOOLING;
 
-int chosen_tank = -1;
-int finished_tanks = 0;
+// Channels (for scheduling)
+urgent chan start_mashing, start_lauter, start_boiling, start_whirlpool, start_filtering;
+chan done_mashing, done_lauter, done_boiling, done_whirlpool;
+chan start_maturation_fermentation[MAX_TANKS];
+broadcast chan done_filtering;
+urgent broadcast chan asap;
 
 // Batch counters between stages
+int wort_batches = 0;
 int sweet_wort_batches = 0, hot_wort_batches = 0, clarified_wort_batches = 0;
 int green_beer_batches = 0, beer_batches = 0;
 
-// Channels (for scheduling)
-urgent chan start_mashing, start_boiling, start_whirlpool, start_filtering;
-chan done_mashing, done_boiling, done_whirlpool;
-broadcast chan start_maturation_fermentation, done_filtering;
-
-// Finished batches?
-int started_batches = 0;
-const int MAX_BATCHES = 50;
-int[0, MAX_BATCHES] finished_batches = 0;
-
-// machine ready-ness
+// Machine readiness flags
+bool is_mashing = false;
 bool lautering_ready = true;
 bool boiling_ready = true;
-bool filtering_ready = true;
 bool whirlpooling_ready = true;
-bool is_mashing = false;
+bool filtering_ready = true;
 
-//Tank counter
+// Tank status and counters
 int[0,1] tanks_status[MAX_TANKS];                // 0 = free, 1 = busy
-int[0,MAX_TANKS] free_tank = MAX_TANKS;         // counter of free tanks
-
-const int TIME_LEFT_LIMIT = 6;
-const int FERMENTATION_TIME = 120;
-const int MATURATION_TIME = 216;
-const int T_MASHING = 2;        // hours (FR-10.1) - global so queries can reference it
-const int T_LAUTER = 2;
-const int T_BOILING = 1; // hours (FR-10)
-const int T_WHIRLPOOLING = 1; // hours (FR-10.4)
-const int T_FILTERING = 4;
-
-// WHIRLPOOLING things
-const int MAX_WHIRLPOOLED_BATCHES = 1;
-
-//Checking time left of tanks
+int[0,MAX_TANKS] free_tank = MAX_TANKS;          // counter of free tanks
 bool almost_done[MAX_TANKS];
 
-bool any_almost_done() {
-    int i;
-    for (i=0; i &lt; MAX_TANKS; i++) {
-        if(almost_done[i])
-            return true; 
+// Batches between the start of mashing and entering a tank
+int[0,MAX_TANKS] in_brewhouse = 0;
+
+int almost_done_count() {
+    int i, n = 0;
+    for (i = 0; i &lt; MAX_TANKS; i++) {
+        if (almost_done[i])
+            n++;
     }
-return false;
+    return n;
+}
+
+// A new batch may start only if a tank will be free when it leaves the brewhouse
+bool tank_for_new_batch() {
+    return in_brewhouse &lt; free_tank + almost_done_count();
+}
+
+int first_free_tank() {
+    int i;
+    for (i = 0; i &lt; MAX_TANKS; i++) {
+        if (!tanks_status[i])
+            return i;
+    }
+    return -1;
 }
 
 bool any_tank_ready() {
     int i;
-    for (i=0; i &lt; MAX_TANKS; i++) {
-        if(!tanks_status[i])
-            return true; 
+    for (i = 0; i &lt; MAX_TANKS; i++) {
+        if (!tanks_status[i])
+            return true;
     }
-return false;
+    return false;
 }</declaration>
 	<template>
 		<name>Scheduler</name>
@@ -108,7 +111,6 @@ return false;
 		<transition id="id7">
 			<source ref="id6"/>
 			<target ref="id0"/>
-
 			<nail x="-51" y="-255"/>
 		</transition>
 		<transition id="id8">
@@ -174,9 +176,8 @@ return false;
 			<source ref="id1"/>
 			<target ref="id0"/>
 			<label kind="select" x="-518" y="-195">t : int[0, MAX_TANKS-1]</label>
-			<label kind="guard" x="-688" y="-178">tanks_status[t] == 0 &amp;&amp; clarified_wort_batches &gt;= 1</label>
-			<label kind="synchronisation" x="-543" y="-229">start_maturation_fermentation!</label>
-			<label kind="assignment" x="-492" y="-212">chosen_tank = t</label>
+			<label kind="guard" x="-688" y="-178">t == first_free_tank() &amp;&amp; clarified_wort_batches &gt;= 1</label>
+			<label kind="synchronisation" x="-543" y="-229">start_maturation_fermentation[t]!</label>
 			<nail x="-246" y="-127"/>
 		</transition>
 		<transition id="id18">
@@ -195,7 +196,7 @@ return false;
 		</location>
 		<location id="id20" x="76" y="-85">
 			<name x="66" y="-119">Mash</name>
-			<label kind="invariant" x="68" y="-68">c&lt;=T_MASHING</label>
+			<label kind="invariant" x="68" y="-68">c &lt;= T_MASHING</label>
 		</location>
 		<location id="id21" x="-119" y="-195">
 			<name x="-129" y="-229">BusyWaiting</name>
@@ -205,13 +206,15 @@ return false;
 			<source ref="id19"/>
 			<target ref="id21"/>
 			<label kind="synchronisation" x="-289" y="-178">start_mashing?</label>
+			<label kind="assignment" x="-289" y="-161">is_mashing = true</label>
 		</transition>
 		<transition id="id23">
 			<source ref="id21"/>
 			<target ref="id20"/>
-			<label kind="guard" x="17" y="-187">(free_tank &gt;= 4 || any_almost_done()) &amp;&amp; wort_batches &lt; MAX_WORT_BATCHES</label>
-			<label kind="assignment" x="34" y="-170">c=0,
-is_mashing = true</label>
+			<label kind="guard" x="17" y="-187">tank_for_new_batch() &amp;&amp; wort_batches &lt; MAX_WORT_BATCHES</label>
+			<label kind="synchronisation" x="17" y="-170">asap!</label>
+			<label kind="assignment" x="34" y="-153">c = 0,
+in_brewhouse++</label>
 		</transition>
 		<transition id="id24">
 			<source ref="id20"/>
@@ -253,13 +256,14 @@ void make_sweet_wort() {
 			<source ref="id25"/>
 			<target ref="id27"/>
 			<label kind="synchronisation" x="-136" y="-119">start_lauter?</label>
+			<label kind="assignment" x="-136" y="-102">lautering_ready = false</label>
 		</transition>
 		<transition id="id29">
 			<source ref="id27"/>
 			<target ref="id26"/>
 			<label kind="guard" x="144" y="-187">sweet_wort_batches &lt; MAX_SWEET_WORT_BATCHES &amp;&amp; has_wort()</label>
-			<label kind="assignment" x="153" y="-170">x = 0,
-lautering_ready = false,
+			<label kind="synchronisation" x="144" y="-170">asap!</label>
+			<label kind="assignment" x="153" y="-153">x = 0,
 take_wort()</label>
 		</transition>
 		<transition id="id30">
@@ -302,14 +306,15 @@ void make_hot_wort() {
 			<source ref="id31"/>
 			<target ref="id33"/>
 			<label kind="synchronisation" x="-450" y="-280">start_boiling?</label>
+			<label kind="assignment" x="-450" y="-263">boiling_ready = false</label>
 		</transition>
 		<transition id="id35">
 			<source ref="id33"/>
 			<target ref="id32"/>
 			<label kind="guard" x="-144" y="-331">hot_wort_batches &lt; MAX_HOT_WORT_BATCHES &amp;&amp; sweet_wort_batches &gt;= 1</label>
-			<label kind="assignment" x="-136" y="-314">reset(),
-take_sweet_wort(),
-boiling_ready = false</label>
+			<label kind="synchronisation" x="-144" y="-314">asap!</label>
+			<label kind="assignment" x="-136" y="-297">reset(),
+take_sweet_wort()</label>
 		</transition>
 		<transition id="id36">
 			<source ref="id32"/>
@@ -351,9 +356,6 @@ void make_clarified_wort() {
 			<name x="-93" y="-33">Whirlpooling</name>
 			<label kind="invariant" x="-93" y="18">a &lt;= T_WHIRLPOOLING</label>
 		</location>
-		<location id="id39" x="-289" y="136">
-			<name x="-340" y="144">WhirlpoolingEnd</name>
-		</location>
 		<location id="id40" x="-365" y="-93">
 			<name x="-425" y="-153">BusyWaiting</name>
 		</location>
@@ -362,31 +364,29 @@ void make_clarified_wort() {
 			<source ref="id37"/>
 			<target ref="id40"/>
 			<label kind="synchronisation" x="-637" y="-76">start_whirlpool?</label>
+			<label kind="assignment" x="-637" y="-59">whirlpooling_ready = false</label>
 		</transition>
 		<transition id="id42">
 			<source ref="id40"/>
 			<target ref="id38"/>
 			<label kind="guard" x="-263" y="-144">clarified_wort_batches &lt; MAX_CLARIFIED_WORT_BATCHES &amp;&amp; has_hot_wort()</label>
-			<label kind="assignment" x="-255" y="-127">reset(),
-take_hot_wort(),
-whirlpooling_ready = false</label>
+			<label kind="synchronisation" x="-263" y="-127">asap!</label>
+			<label kind="assignment" x="-255" y="-110">reset(),
+take_hot_wort()</label>
 		</transition>
 		<transition id="id43">
-			<source ref="id39"/>
-			<target ref="id37"/>
-			<label kind="synchronisation" x="-646" y="76">done_whirlpool!</label>
-			<label kind="assignment" x="-646" y="93">whirlpooling_ready = true</label>
-		</transition>
-		<transition id="id44">
 			<source ref="id38"/>
-			<target ref="id39"/>
-			<label kind="guard" x="-195" y="85">a == T_WHIRLPOOLING</label>
-			<label kind="assignment" x="-195" y="102">make_clarified_wort()</label>
+			<target ref="id37"/>
+			<label kind="guard" x="-442" y="110">a == T_WHIRLPOOLING</label>
+			<label kind="synchronisation" x="-442" y="127">done_whirlpool!</label>
+			<label kind="assignment" x="-442" y="144">make_clarified_wort(),
+whirlpooling_ready = true</label>
+			<nail x="-365" y="110"/>
 		</transition>
 	</template>
 	<template>
 		<name>Tank</name>
-		<parameter>int tank_idx, int &amp;cold_wort_batches, int &amp;green_beer_batches, int&amp; beer_batches</parameter>
+		<parameter>int tank_idx, int &amp;cold_wort_batches, int &amp;green_beer_batches, int &amp;beer_batches</parameter>
 		<declaration>clock c;
 
 void reset() {
@@ -395,6 +395,7 @@ void reset() {
 
 void start_fermentation() {
     cold_wort_batches--;
+    in_brewhouse--;
 }
 
 void stop_fermentation() {
@@ -433,10 +434,6 @@ void set_tank_free() {
 			<name x="170" y="-127">Maturation</name>
 			<label kind="invariant" x="144" y="-102">c &lt;= FERMENTATION_TIME + MATURATION_TIME - TIME_LEFT_LIMIT</label>
 		</location>
-		<location id="id48" x="-510" y="-272">
-			<name x="-520" y="-306">CheckTankIdx</name>
-			<committed/>
-		</location>
 		<location id="id49" x="-119" y="-17">
 			<name x="-85" y="-25">MaturationEnd</name>
 			<label kind="invariant" x="-238" y="8">c &lt;= FERMENTATION_TIME + MATURATION_TIME</label>
@@ -448,26 +445,14 @@ void set_tank_free() {
 			<label kind="guard" x="42" y="-59">c == FERMENTATION_TIME + MATURATION_TIME - TIME_LEFT_LIMIT</label>
 			<label kind="assignment" x="42" y="-76">almost_done[tank_idx] = true</label>
 		</transition>
-		<transition id="id51">
-			<source ref="id48"/>
-			<target ref="id45"/>
-			<label kind="guard" x="-671" y="-382">tank_idx != chosen_tank</label>
-			<nail x="-739" y="-399"/>
-		</transition>
 		<transition id="id52">
-			<source ref="id48"/>
-			<target ref="id46"/>
-			<label kind="guard" x="-501" y="-340">tank_idx == chosen_tank &amp;&amp; cold_wort_batches &gt;= 1</label>
-			<label kind="assignment" x="-459" y="-238">reset(),
-set_tank_busy(),
-start_fermentation(),
-started_batches++</label>
-		</transition>
-		<transition id="id53">
 			<source ref="id45"/>
-			<target ref="id48"/>
-			<label kind="guard" x="-875" y="-204">started_batches &lt; MAX_BATCHES</label>
-			<label kind="synchronisation" x="-739" y="-221">start_maturation_fermentation?</label>
+			<target ref="id46"/>
+			<label kind="guard" x="-646" y="-289">cold_wort_batches &gt;= 1</label>
+			<label kind="synchronisation" x="-646" y="-272">start_maturation_fermentation[tank_idx]?</label>
+			<label kind="assignment" x="-646" y="-255">reset(),
+set_tank_busy(),
+start_fermentation()</label>
 		</transition>
 		<transition id="id54">
 			<source ref="id49"/>
@@ -475,7 +460,6 @@ started_batches++</label>
 			<label kind="guard" x="-620" y="-17">c == FERMENTATION_TIME + MATURATION_TIME</label>
 			<label kind="assignment" x="-535" y="0">stop_maturation(),
 set_tank_free(),
-finished_tanks++,
 almost_done[tank_idx] = false</label>
 			<nail x="-467" y="-42"/>
 		</transition>
@@ -489,15 +473,13 @@ start_maturation()</label>
 	</template>
 	<template>
 		<name>Filtering</name>
-		<declaration>clock c;
-
-</declaration>
+		<declaration>clock c;</declaration>
 		<location id="id56" x="-841" y="-263">
 			<name x="-851" y="-297">Wait</name>
 		</location>
 		<location id="id57" x="-518" y="-263">
 			<name x="-528" y="-297">Filtering</name>
-			<label kind="invariant" x="-528" y="-246">c&lt;=T_FILTERING</label>
+			<label kind="invariant" x="-528" y="-246">c &lt;= T_FILTERING</label>
 		</location>
 		<init ref="id56"/>
 		<transition id="id58">
@@ -505,8 +487,7 @@ start_maturation()</label>
 			<target ref="id56"/>
 			<label kind="guard" x="-731" y="-136">c == T_FILTERING</label>
 			<label kind="synchronisation" x="-731" y="-153">done_filtering!</label>
-			<label kind="assignment" x="-731" y="-119">finished_batches++,
-filtering_ready = true</label>
+			<label kind="assignment" x="-731" y="-119">filtering_ready = true</label>
 			<nail x="-680" y="-153"/>
 		</transition>
 		<transition id="id59">
@@ -526,6 +507,9 @@ tank3 = Tank(2, clarified_wort_batches, green_beer_batches, beer_batches);
 tank4 = Tank(3, clarified_wort_batches, green_beer_batches, beer_batches);
 tank5 = Tank(4, clarified_wort_batches, green_beer_batches, beer_batches);
 tank6 = Tank(5, clarified_wort_batches, green_beer_batches, beer_batches);
+
+// Uncomment additional tanks only after increasing MAX_TANKS in global Declarations
+/*
 tank7 = Tank(6, clarified_wort_batches, green_beer_batches, beer_batches);
 tank8 = Tank(7, clarified_wort_batches, green_beer_batches, beer_batches);
 tank9 = Tank(8, clarified_wort_batches, green_beer_batches, beer_batches);
@@ -544,6 +528,7 @@ tank21 = Tank(20, clarified_wort_batches, green_beer_batches, beer_batches);
 tank22 = Tank(21, clarified_wort_batches, green_beer_batches, beer_batches);
 tank23 = Tank(22, clarified_wort_batches, green_beer_batches, beer_batches);
 tank24 = Tank(23, clarified_wort_batches, green_beer_batches, beer_batches);
+*/
 
 mashing = Mashing();
 lautering = Lautering();
@@ -555,8 +540,8 @@ scheduler = Scheduler();
 system scheduler, mashing, lautering, boiling, whirlpooling, filtering, tank1, tank2, tank3, tank4, tank5, tank6;</system>
 	<queries>
 		<query>
-			<formula>A[] (deadlock imply started_batches == MAX_BATCHES)</formula>
-			<comment/>
+			<formula>A[] not deadlock</formula>
+			<comment>Continuous production without deadlocks</comment>
 		</query>
 		<query>
 			<formula>E&lt;&gt; boiling.Boil</formula>
