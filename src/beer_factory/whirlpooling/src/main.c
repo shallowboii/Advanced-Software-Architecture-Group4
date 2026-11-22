@@ -3,8 +3,8 @@
  *   - takes commands from Kafka (machine_kafka, topic "machine.whirlpooling")
  *     and answers with statuses on the same topic,
  *   - drives the whirlpool state machine (whirlpooling.c),
- *   - sends an MQTT heartbeat (machine_mqtt; broker fixed in heartbeat.c). If
- *     MQTT can't start, it prints a warning and keeps running.
+ *   - sends an MQTT heartbeat like boiling does (machine_mqtt; broker fixed in
+ *     heartbeat.c). If MQTT can't start, it prints a warning and keeps running.
  *
  * Usage: whirlpooling [machine-name]      (default whirlpooling-1)
  *
@@ -28,7 +28,6 @@
 #include <time.h>
 
 #define MACHINE_TYPE "whirlpooling"
-#define HEARTBEAT_PREFIX "WHIRLPOOLING" /* MQTT client id: WHIRLPOOLING-<id> */
 #define TOPIC "machine." MACHINE_TYPE
 #define GROUP_ID_LEN 48 /* "whirlpooling-<id>", this machine's consumer group */
 
@@ -111,11 +110,10 @@ static int machine_id_from(const char *name) {
   return (int)id;
 }
 
-static uint64_t elapsed_ms_since(const struct timespec *started) {
-  struct timespec now;
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  return (uint64_t)(now.tv_sec - started->tv_sec) * 1000 +
-         (uint64_t)(now.tv_nsec / 1000000) -
+static uint64_t elapsed_ms_between(const struct timespec *started,
+                                   const struct timespec *now) {
+  return (uint64_t)(now->tv_sec - started->tv_sec) * 1000 +
+         (uint64_t)(now->tv_nsec / 1000000) -
          (uint64_t)(started->tv_nsec / 1000000);
 }
 
@@ -158,6 +156,20 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
 
+  /* Start the MQTT heartbeat */
+  enum MQTTErrors *mqtt_result = heartbeat_init("WHIRLPOOLING", c.id);
+  /* Remember it now: *mqtt_result changes if a heartbeat fails later */
+  int mqtt_started = *mqtt_result == MQTT_OK;
+  if (!mqtt_started) {
+    printf("Could not start MQTT!\n");
+  }
+
+  struct timespec started;
+  if (clock_gettime(CLOCK_MONOTONIC, &started) != 0) {
+    perror("clock_gettime");
+    return EXIT_FAILURE;
+  }
+
   /* Own consumer group per machine, so every machine reads the whole topic
    * and keeps only the commands for its own id. */
   char group_id[GROUP_ID_LEN];
@@ -169,14 +181,15 @@ int main(int argc, char **argv) {
   printf("Whirlpooling %d: Kafka %s, topic %s, time x%g.\n", c.id, brokers,
          TOPIC, time_scale);
 
-  int mqtt_on = *heartbeat_init(HEARTBEAT_PREFIX, c.id) == MQTT_OK;
-  if (!mqtt_on)
-    printf("Could not start MQTT; running without heartbeat.\n");
-
-  struct timespec started;
-  clock_gettime(CLOCK_MONOTONIC, &started);
+  int status = EXIT_SUCCESS;
   while (!stopping) {
-    uint64_t elapsed_ms = elapsed_ms_since(&started);
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+      perror("clock_gettime");
+      status = EXIT_FAILURE;
+      break;
+    }
+    uint64_t elapsed_ms = elapsed_ms_between(&started, &now);
     c.now = (uint64_t)((double)elapsed_ms * time_scale / 1000.0);
 
     /* Waits up to KAFKA_POLL_TIMEOUT_MS for a command; this is the loop's
@@ -187,14 +200,16 @@ int main(int argc, char **argv) {
     if (whirlpooling_update(&c.whirlpool, c.now) == WHIRLPOOLING_DONE)
       finish_batch(&c);
 
-    /* Real seconds, not simulated: does nothing if MQTT didn't start. */
-    heartbeat_update(MACHINE_TYPE, elapsed_ms / 1000);
+    /* Real clock, not the simulated one: the first heartbeat goes out right
+     * away, then heartbeat.c repeats it every few seconds */
+    heartbeat_update(MACHINE_TYPE, now.tv_sec);
   }
 
-  /* Only after a successful init: heartbeat_destroy closes the socket. */
-  if (mqtt_on)
+  /* Only if MQTT started: otherwise there is no connection to close */
+  if (mqtt_started) {
     heartbeat_destroy();
+  }
   kafka_consumer_close(c.consumer);
   kafka_producer_close(c.producer);
-  return EXIT_SUCCESS;
+  return status;
 }

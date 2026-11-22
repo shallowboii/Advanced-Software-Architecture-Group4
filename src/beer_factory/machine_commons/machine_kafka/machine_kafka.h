@@ -92,7 +92,8 @@ rd_kafka_t *kafka_consumer_new(const char *brokers, const char *group_id,
                                const char *topic);
 
 /* Wait up to KAFKA_POLL_TIMEOUT_MS for one message and pass it to handler.
- * Returns 1 if a message was handled, 0 if none came. */
+ * Kafka errors and messages of the wrong size are printed to stderr and
+ * skipped. Returns 1 if a message was handled, 0 if not. */
 int kafka_poll(rd_kafka_t *consumer, kafka_message_handler handler,
                void *context);
 

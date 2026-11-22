@@ -26,12 +26,21 @@ The library only covers the happy path for now. Places that still need work are 
 | `kafka_send(producer, topic, &msg)` | queues `msg` on `topic` with key `msg.machine_id` |
 | `kafka_producer_close(producer)` | waits up to 10 s for outstanding messages, then frees the producer |
 | `kafka_consumer_new(brokers, group_id, topic)` | creates a consumer subscribed to one topic |
-| `kafka_poll(consumer, handler, context)` | waits up to 100 ms for one message, calls `handler(&msg, context)`, then commits. Returns 1 if it handled a message, 0 if none came |
+| `kafka_poll(consumer, handler, context)` | waits up to 100 ms for one message, calls `handler(&msg, context)`, then commits. Kafka errors and messages of the wrong size are printed and skipped. Returns 1 if it handled a message, 0 if not |
 | `kafka_consumer_close(consumer)` | leaves the group and frees the consumer |
 
-`context` is passed through to your handler unchanged. Use it to reach your own state without globals.
+`handler` is your function of type `kafka_message_handler`: `void handler(const kafka_message_t *msg, void *context)`. `context` is passed through to it unchanged. Use it to reach your own state without globals.
+
+If a sent message can't be delivered, `on_delivery_report` in `machine_kafka.c` prints it to stderr. It only runs during `kafka_send`, `kafka_producer_close` or `rd_kafka_poll(producer, 0)`, so call the last one in your loop.
 
 Every participant needs one producer and one consumer, because a librdkafka handle is either one or the other. Each machine instance needs its **own** `group_id` (e.g. `whirlpooling-1`) so that it reads the whole topic. If instances shared a group, Kafka would split the partitions between them, and a machine could miss its own commands.
+
+## Known limitations
+
+- **Create the topic before starting a consumer.** If it doesn't exist yet, `kafka_poll` prints `Kafka: Subscribed topic not available: ...` and keeps waiting. It picks the topic up once it's created, but messages sent before that are missed.
+- **Messages of the wrong size are skipped.** `kafka_poll` prints `Kafka: skipped a message of N bytes` and commits it, so it isn't read again.
+- **Send only messages built with `kafka_message_t`.** A message of the right size whose text fields have no closing `'\0'` still reaches the handler, and printing such a field reads past its end. Don't use "Produce Message" in a Kafka UI on these topics.
+- **Failures aren't reported to the caller.** `kafka_send` always returns 0, and the create functions don't check their settings.
 
 ## Usage
 
@@ -158,6 +167,13 @@ git -c advice.detachedHead=false clone -q --depth 1 -b v1.1.7 \
 ```bash
 make -C whirlpooling build/whirlpooling MQTT_C_DIR=/opt/MQTT-C
 KAFKA_BROKERS=localhost:9092 TIME_SCALE=600 ./whirlpooling/build/whirlpooling whirlpooling-1 &
+```
+
+This test has no MQTT broker, so whirlpooling first prints the following. That's expected, and the Kafka test works without it. To test the heartbeat too, see the [whirlpooling README](../../whirlpooling/README.md#mqtt-heartbeat).
+
+```text
+Could not connect to MQTT broker localhost:1883.
+Could not start MQTT!
 ```
 
 **5. Wait about 10 s** so that whirlpooling's consumer gets its partitions. Then save the scheduler program from above as `/tmp/send_start.c` and run it:

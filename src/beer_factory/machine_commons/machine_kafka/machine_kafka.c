@@ -131,23 +131,40 @@ int kafka_poll(rd_kafka_t *consumer, kafka_message_handler handler,
       rd_kafka_consumer_poll(consumer, KAFKA_POLL_TIMEOUT_MS);
   if (received == NULL)
     return 0; /* nothing came in time */
-  // TODO: error handling (received->err)
 
-  /* 2. Hand it to the caller */
+  /* 2. Skip Kafka errors, e.g. "topic doesn't exist". They look like a
+   *    message, but carry an error text instead of our payload.
+   *    librdkafka keeps retrying by itself, so there's nothing to commit. */
+  if (received->err) {
+    fprintf(stderr, "Kafka: %s\n", rd_kafka_message_errstr(received));
+    rd_kafka_message_destroy(received);
+    return 0;
+  }
+
+  /* 3. Skip messages of the wrong size: copying them would read past the
+   *    end. Commit them, so they aren't read again. */
   // TODO(marton): payload format (JSON fields); for now the raw struct
-  kafka_message_t msg;
-  memcpy(&msg, received->payload, sizeof(msg));
-  handler(&msg, context);
+  int handled = 0;
+  if (received->len != sizeof(kafka_message_t)) {
+    fprintf(stderr, "Kafka: skipped a message of %zu bytes (expected %zu)\n",
+            received->len, sizeof(kafka_message_t));
+  } else {
+    /* 4. Hand it to the caller */
+    kafka_message_t msg;
+    memcpy(&msg, received->payload, sizeof(msg));
+    handler(&msg, context);
+    handled = 1;
+  }
 
-  /* 3. Only now mark it as done (commit). A crash before this line
+  /* 5. Only now mark it as done (commit). A crash before this line
    *    means the message is delivered again. 0 = wait for the commit. */
   // TODO(marton): duplicates are possible (at-least-once); decide handling
   // TODO: error handling
   rd_kafka_commit_message(consumer, received, 0);
 
-  /* 4. Free it */
+  /* 6. Free it */
   rd_kafka_message_destroy(received);
-  return 1;
+  return handled;
 }
 
 void kafka_consumer_close(rd_kafka_t *consumer)
