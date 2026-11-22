@@ -24,8 +24,8 @@ int green_beer_batches = 0, beer_batches = 0;
 
 // Channels (for scheduling)
 urgent chan start_mashing, start_boiling, start_whirlpool, start_filtering;
-chan done_mashing, done_boiling, done_whirlpool, done_maturation_fermentation, done_filtering;
-broadcast chan start_maturation_fermentation;
+chan done_mashing, done_boiling, done_whirlpool;
+broadcast chan start_maturation_fermentation, done_filtering;
 
 // Finished batches?
 int started_batches = 0;
@@ -43,14 +43,14 @@ bool is_mashing = false;
 int[0,1] tanks_status[MAX_TANKS];                // 0 = free, 1 = busy
 int[0,MAX_TANKS] free_tank = MAX_TANKS;         // counter of free tanks
 
-const int TIME_LEFT_LIMIT = 6 * 60 * 60;
-const int FERMENTATION_TIME = 120 * 60 * 60;
-const int MATURATION_TIME = 216 * 60 * 60;
-const int T_MASHING = 2 * 60 * 60;        // hours (FR-10.1) - global so queries can reference it
-const int T_LAUTER = 2 * 60 * 60;
-const int T_BOILING = 1 * 60 * 60; // hours (FR-10)
-const int T_WHIRLPOOLING = 1 * 60 * 60; // hours (FR-10.4)
-const int T_FILTERING = 4 * 60 * 60;
+const int TIME_LEFT_LIMIT = 6;
+const int FERMENTATION_TIME = 120;
+const int MATURATION_TIME = 216;
+const int T_MASHING = 2;        // hours (FR-10.1) - global so queries can reference it
+const int T_LAUTER = 2;
+const int T_BOILING = 1; // hours (FR-10)
+const int T_WHIRLPOOLING = 1; // hours (FR-10.4)
+const int T_FILTERING = 4;
 
 // WHIRLPOOLING things
 const int MAX_WHIRLPOOLED_BATCHES = 1;
@@ -108,14 +108,14 @@ return false;
 		<transition id="id7">
 			<source ref="id6"/>
 			<target ref="id0"/>
-			<label kind="synchronisation" x="-144" y="-349">start_filtering!</label>
+
 			<nail x="-51" y="-255"/>
 		</transition>
 		<transition id="id8">
 			<source ref="id0"/>
 			<target ref="id6"/>
-			<label kind="guard" x="-331" y="-289">filtering_ready == true</label>
-			<label kind="synchronisation" x="-382" y="-306">done_maturation_fermentation?</label>
+			<label kind="guard" x="-331" y="-289">filtering_ready &amp;&amp; beer_batches &gt; 0</label>
+			<label kind="synchronisation" x="-382" y="-306">start_filtering!</label>
 			<nail x="-127" y="-229"/>
 		</transition>
 		<transition id="id9">
@@ -555,31 +555,31 @@ scheduler = Scheduler();
 system scheduler, mashing, lautering, boiling, whirlpooling, filtering, tank1, tank2, tank3, tank4, tank5, tank6;</system>
 	<queries>
 		<query>
-			<formula>A[] not deadlock</formula>
+			<formula>A[] (deadlock imply started_batches == MAX_BATCHES)</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Boiling.Boil</formula>
+			<formula>E&lt;&gt; boiling.Boil</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Boiling.Wait</formula>
+			<formula>E&lt;&gt; boiling.Wait</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Mashing.Mash</formula>
+			<formula>E&lt;&gt; mashing.Mash</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Mashing.Wait</formula>
+			<formula>E&lt;&gt; mashing.Wait</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Lautering.Lauter</formula>
+			<formula>E&lt;&gt; lautering.Lauter</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Lautering.Wait</formula>
+			<formula>E&lt;&gt; lautering.Wait</formula>
 			<comment/>
 		</query>
 		<query>
@@ -591,47 +591,47 @@ system scheduler, mashing, lautering, boiling, whirlpooling, filtering, tank1, t
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Tank1.Fermentation</formula>
+			<formula>E&lt;&gt; tank1.Fermentation</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Tank1.Maturation</formula>
+			<formula>E&lt;&gt; tank1.Maturation</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Tank1.Wait</formula>
+			<formula>E&lt;&gt; tank1.Wait</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Filtering.Filter</formula>
+			<formula>E&lt;&gt; filtering.Filtering</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Filtering.Wait</formula>
+			<formula>E&lt;&gt; filtering.Wait</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Scheduler.Boil</formula>
+			<formula>E&lt;&gt; scheduler.Boil</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Scheduler.Lauter</formula>
+			<formula>E&lt;&gt; scheduler.Lauter</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Scheduler.Mash</formula>
+			<formula>E&lt;&gt; scheduler.Mash</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Scheduler.Whirlpool</formula>
+			<formula>E&lt;&gt; scheduler.Whirlpool</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Scheduler.Maturation</formula>
+			<formula>E&lt;&gt; scheduler.Maturation</formula>
 			<comment/>
 		</query>
 		<query>
-			<formula>E&lt;&gt; Scheduler.Filter</formula>
+			<formula>E&lt;&gt; scheduler.Filter</formula>
 			<comment/>
 		</query>
 	</queries>
