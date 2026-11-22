@@ -22,10 +22,8 @@ const int TIME_LEFT_LIMIT = T_MASHING + T_LAUTER + T_BOILING + T_WHIRLPOOLING;
 
 // Channels (for scheduling)
 urgent chan start_mashing, start_lauter, start_boiling, start_whirlpool, start_filtering;
-chan done_mashing, done_lauter, done_boiling, done_whirlpool;
-chan start_maturation_fermentation[MAX_TANKS];
-broadcast chan done_filtering;
-urgent broadcast chan asap;
+urgent chan start_maturation_fermentation[MAX_TANKS];
+broadcast chan done_mashing, done_lauter, done_boiling, done_whirlpool, done_filtering;
 
 // Batch counters between stages
 int wort_batches = 0;
@@ -128,7 +126,7 @@ bool any_tank_ready() {
 		<transition id="id10">
 			<source ref="id0"/>
 			<target ref="id5"/>
-			<label kind="guard" x="170" y="-204">is_mashing == false</label>
+			<label kind="guard" x="85" y="-221">is_mashing == false &amp;&amp; tank_for_new_batch() &amp;&amp; wort_batches &lt; MAX_WORT_BATCHES</label>
 			<label kind="synchronisation" x="170" y="-187">start_mashing!</label>
 			<nail x="42" y="-42"/>
 			<nail x="178" y="-127"/>
@@ -136,55 +134,50 @@ bool any_tank_ready() {
 		<transition id="id11">
 			<source ref="id4"/>
 			<target ref="id0"/>
-			<label kind="synchronisation" x="-416" y="8">start_whirlpool!</label>
 			<nail x="-229" y="17"/>
 		</transition>
 		<transition id="id12">
 			<source ref="id0"/>
 			<target ref="id4"/>
-			<label kind="guard" x="-374" y="85">whirlpooling_ready == true</label>
-			<label kind="synchronisation" x="-374" y="102">done_boiling?</label>
+			<label kind="guard" x="-680" y="93">whirlpooling_ready &amp;&amp; hot_wort_batches &gt;= 1 &amp;&amp; clarified_wort_batches &lt; MAX_CLARIFIED_WORT_BATCHES</label>
+			<label kind="synchronisation" x="-374" y="110">start_whirlpool!</label>
 			<nail x="-212" y="68"/>
 		</transition>
 		<transition id="id13">
 			<source ref="id3"/>
 			<target ref="id0"/>
-			<label kind="synchronisation" x="25" y="195">start_boiling!</label>
 			<nail x="25" y="153"/>
 		</transition>
 		<transition id="id14">
 			<source ref="id0"/>
 			<target ref="id3"/>
-			<label kind="guard" x="-187" y="178">boiling_ready == true</label>
-			<label kind="synchronisation" x="-153" y="195">done_lauter?</label>
+			<label kind="guard" x="-442" y="178">boiling_ready &amp;&amp; sweet_wort_batches &gt;= 1 &amp;&amp; hot_wort_batches &lt; MAX_HOT_WORT_BATCHES</label>
+			<label kind="synchronisation" x="-153" y="195">start_boiling!</label>
 			<nail x="-17" y="153"/>
 		</transition>
 		<transition id="id15">
 			<source ref="id2"/>
 			<target ref="id0"/>
-			<label kind="synchronisation" x="374" y="17">start_lauter!</label>
 			<nail x="246" y="25"/>
 		</transition>
 		<transition id="id16">
 			<source ref="id0"/>
 			<target ref="id2"/>
-			<label kind="guard" x="357" y="-51">lautering_ready == true</label>
-			<label kind="synchronisation" x="365" y="-34">done_mashing?</label>
+			<label kind="guard" x="221" y="-51">lautering_ready &amp;&amp; wort_batches &gt;= 1 &amp;&amp; sweet_wort_batches &lt; MAX_SWEET_WORT_BATCHES</label>
+			<label kind="synchronisation" x="365" y="-34">start_lauter!</label>
 			<nail x="246" y="-17"/>
 		</transition>
 		<transition id="id17">
 			<source ref="id1"/>
 			<target ref="id0"/>
-			<label kind="select" x="-518" y="-195">t : int[0, MAX_TANKS-1]</label>
-			<label kind="guard" x="-688" y="-178">t == first_free_tank() &amp;&amp; clarified_wort_batches &gt;= 1</label>
-			<label kind="synchronisation" x="-543" y="-229">start_maturation_fermentation[t]!</label>
 			<nail x="-246" y="-127"/>
 		</transition>
 		<transition id="id18">
 			<source ref="id0"/>
 			<target ref="id1"/>
-			<label kind="guard" x="-467" y="-127">any_tank_ready()</label>
-			<label kind="synchronisation" x="-467" y="-110">done_whirlpool?</label>
+			<label kind="select" x="-561" y="-110">t : int[0, MAX_TANKS-1]</label>
+			<label kind="guard" x="-731" y="-93">any_tank_ready() &amp;&amp; t == first_free_tank() &amp;&amp; clarified_wort_batches &gt;= 1</label>
+			<label kind="synchronisation" x="-561" y="-76">start_maturation_fermentation[t]!</label>
 			<nail x="-280" y="-85"/>
 		</transition>
 	</template>
@@ -198,23 +191,15 @@ bool any_tank_ready() {
 			<name x="66" y="-119">Mash</name>
 			<label kind="invariant" x="68" y="-68">c &lt;= T_MASHING</label>
 		</location>
-		<location id="id21" x="-119" y="-195">
-			<name x="-129" y="-229">BusyWaiting</name>
-		</location>
 		<init ref="id19"/>
 		<transition id="id22">
 			<source ref="id19"/>
-			<target ref="id21"/>
-			<label kind="synchronisation" x="-289" y="-178">start_mashing?</label>
-			<label kind="assignment" x="-289" y="-161">is_mashing = true</label>
-		</transition>
-		<transition id="id23">
-			<source ref="id21"/>
 			<target ref="id20"/>
-			<label kind="guard" x="17" y="-187">tank_for_new_batch() &amp;&amp; wort_batches &lt; MAX_WORT_BATCHES</label>
-			<label kind="synchronisation" x="17" y="-170">asap!</label>
-			<label kind="assignment" x="34" y="-153">c = 0,
+			<label kind="synchronisation" x="-161" y="-178">start_mashing?</label>
+			<label kind="assignment" x="-161" y="-161">c = 0,
+is_mashing = true,
 in_brewhouse++</label>
+			<nail x="-102" y="-144"/>
 		</transition>
 		<transition id="id24">
 			<source ref="id20"/>
@@ -248,23 +233,16 @@ void make_sweet_wort() {
 			<name x="236" y="-59">Lauter</name>
 			<label kind="invariant" x="236" y="-8">x &lt;= T_LAUTER</label>
 		</location>
-		<location id="id27" x="34" y="-161">
-			<name x="-17" y="-221">BusyWaiting</name>
-		</location>
 		<init ref="id25"/>
 		<transition id="id28">
 			<source ref="id25"/>
-			<target ref="id27"/>
-			<label kind="synchronisation" x="-136" y="-119">start_lauter?</label>
-			<label kind="assignment" x="-136" y="-102">lautering_ready = false</label>
-		</transition>
-		<transition id="id29">
-			<source ref="id27"/>
 			<target ref="id26"/>
-			<label kind="guard" x="144" y="-187">sweet_wort_batches &lt; MAX_SWEET_WORT_BATCHES &amp;&amp; has_wort()</label>
-			<label kind="synchronisation" x="144" y="-170">asap!</label>
-			<label kind="assignment" x="153" y="-153">x = 0,
-take_wort()</label>
+			<label kind="guard" x="17" y="-153">has_wort()</label>
+			<label kind="synchronisation" x="17" y="-136">start_lauter?</label>
+			<label kind="assignment" x="17" y="-119">x = 0,
+take_wort(),
+lautering_ready = false</label>
+			<nail x="68" y="-102"/>
 		</transition>
 		<transition id="id30">
 			<source ref="id26"/>
@@ -298,23 +276,16 @@ void make_hot_wort() {
 			<name x="-33" y="-212">Boil</name>
 			<label kind="invariant" x="-50" y="-161">c &lt;= T_BOILING</label>
 		</location>
-		<location id="id33" x="-246" y="-314">
-			<name x="-306" y="-374">BusyWaiting</name>
-		</location>
 		<init ref="id31"/>
 		<transition id="id34">
 			<source ref="id31"/>
-			<target ref="id33"/>
-			<label kind="synchronisation" x="-450" y="-280">start_boiling?</label>
-			<label kind="assignment" x="-450" y="-263">boiling_ready = false</label>
-		</transition>
-		<transition id="id35">
-			<source ref="id33"/>
 			<target ref="id32"/>
-			<label kind="guard" x="-144" y="-331">hot_wort_batches &lt; MAX_HOT_WORT_BATCHES &amp;&amp; sweet_wort_batches &gt;= 1</label>
-			<label kind="synchronisation" x="-144" y="-314">asap!</label>
-			<label kind="assignment" x="-136" y="-297">reset(),
-take_sweet_wort()</label>
+			<label kind="guard" x="-306" y="-297">sweet_wort_batches &gt;= 1</label>
+			<label kind="synchronisation" x="-306" y="-280">start_boiling?</label>
+			<label kind="assignment" x="-306" y="-263">reset(),
+take_sweet_wort(),
+boiling_ready = false</label>
+			<nail x="-238" y="-246"/>
 		</transition>
 		<transition id="id36">
 			<source ref="id32"/>
@@ -356,23 +327,16 @@ void make_clarified_wort() {
 			<name x="-93" y="-33">Whirlpooling</name>
 			<label kind="invariant" x="-93" y="18">a &lt;= T_WHIRLPOOLING</label>
 		</location>
-		<location id="id39" x="-365" y="-93">
-			<name x="-425" y="-153">BusyWaiting</name>
-		</location>
 		<init ref="id37"/>
 		<transition id="id40">
 			<source ref="id37"/>
-			<target ref="id39"/>
-			<label kind="synchronisation" x="-637" y="-76">start_whirlpool?</label>
-			<label kind="assignment" x="-637" y="-59">whirlpooling_ready = false</label>
-		</transition>
-		<transition id="id41">
-			<source ref="id39"/>
 			<target ref="id38"/>
-			<label kind="guard" x="-263" y="-144">clarified_wort_batches &lt; MAX_CLARIFIED_WORT_BATCHES &amp;&amp; has_hot_wort()</label>
-			<label kind="synchronisation" x="-263" y="-127">asap!</label>
-			<label kind="assignment" x="-255" y="-110">reset(),
-take_hot_wort()</label>
+			<label kind="guard" x="-442" y="-110">has_hot_wort()</label>
+			<label kind="synchronisation" x="-442" y="-93">start_whirlpool?</label>
+			<label kind="assignment" x="-442" y="-76">reset(),
+take_hot_wort(),
+whirlpooling_ready = false</label>
+			<nail x="-365" y="-68"/>
 		</transition>
 		<transition id="id42">
 			<source ref="id38"/>
@@ -537,14 +501,10 @@ system scheduler, mashing, lautering, boiling, whirlpooling, filtering, tank1, t
 		<query>
 			<formula>A[] not deadlock</formula>
 			<comment>Continuous production without deadlocks</comment>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>A[] wort_batches &gt;= 0</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:53 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>A[] sweet_wort_batches &gt;= 0</formula>
@@ -553,116 +513,78 @@ system scheduler, mashing, lautering, boiling, whirlpooling, filtering, tank1, t
 		<query>
 			<formula>E&lt;&gt; boiling.Boil</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; boiling.Wait</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; mashing.Mash</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; mashing.Wait</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; lautering.Lauter</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; lautering.Wait</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; whirlpooling.Whirlpooling</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; whirlpooling.Wait</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; tank1.Fermentation</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; tank1.Maturation</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; tank1.Wait</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; filtering.Filtering</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; filtering.Wait</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; scheduler.Boil</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; scheduler.Lauter</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; scheduler.Mash</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; scheduler.Whirlpool</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; scheduler.Maturation</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 		<query>
 			<formula>E&lt;&gt; scheduler.Filter</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2026-11-22 17:03:16 +0100">
-			</result>
 		</query>
 	</queries>
 </nta>
