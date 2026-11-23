@@ -11,7 +11,8 @@ class ControllerTests(unittest.TestCase):
     def run_controller(self, *args, scenario="normal"):
         return subprocess.run(
             [BINARY, *args], capture_output=True, text=True, timeout=5,
-            env={**os.environ, "CONTROLLER_SCENARIO": scenario},
+            env={**os.environ, "CONTROLLER_SCENARIO": scenario,
+                 "KAFKA_BROKERS": "test-broker:9092"},
         )
 
     def test_requires_one_argument(self):
@@ -35,6 +36,9 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(result.stderr, "")
         self.assertEqual(result.stdout.count("Boiling started"), 1)
         self.assertEqual(result.stdout.count("Boiling complete; waiting."), 1)
+        self.assertEqual(result.stdout.count("KAFKA 4 B-1\n"), 1)
+        self.assertEqual(result.stdout.count("KAFKA 3 B-1\n"), 1)
+        self.assertNotIn("B-busy", result.stdout)
         for tick in [0, 5, 3599, 3605]:
             self.assertIn(f"SEND {tick} boiling\n", result.stdout)
         self.assertEqual(result.stdout.count("SEND "), 4)
@@ -60,7 +64,18 @@ class ControllerTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("clock_gettime", result.stderr)
         self.assertIn("DESTROY", result.stdout)
+        self.assertIn("CONSUMER_CLOSE", result.stdout)
+        self.assertIn("PRODUCER_CLOSE", result.stdout)
         self.assertNotIn("Boiling complete", result.stdout)
+
+    def test_waits_for_start_for_this_machine(self):
+        for scenario in ["no-start", "wrong-id", "status-only"]:
+            with self.subTest(scenario=scenario):
+                result = self.run_controller("7", scenario=scenario)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn("Boiling started", result.stdout)
+                self.assertNotIn("KAFKA ", result.stdout)
+                self.assertIn("SEND 3605 boiling", result.stdout)
 
 
 if __name__ == "__main__":

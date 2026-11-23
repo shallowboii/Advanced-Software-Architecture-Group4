@@ -1,67 +1,46 @@
-#include <stdio.h>
-#include <stdbool.h>
+#include "filtering.h"
 
-#include "machine.h"
-
-#define T_FILTERING 4
-
-typedef enum { WAIT , FILTERING } State;
-
-typedef struct {
-    State state;
-    int c; //clock
-    int duration;
-    int beer_batches; //batches to be filtered
-    int finished_batches; //completely done
-} Filtering;
-
-//Setting up machine
-static void init(void *self) {
-    Filtering *m = self;
-    m->state = WAIT;
-    m->c = 0;
-    m->duration = T_FILTERING;
-    m->beer_batches=0;
-    m->finished_batches=0;
+void filtering_init(filtering_t *filtering, filtering_batches_t *batches) {
+  *filtering = (filtering_t){.state = FILTERING_WAIT, .batches = batches};
 }
 
-static int duration(const void *self) { 
-    return ((const Filtering *)self)->duration; 
+filtering_result_t filtering_start(filtering_t *filtering, uint64_t now_seconds) {
+  if (now_seconds < filtering->last_time_seconds) {
+    return FILTERING_INVALID_TIME;
+  }
+
+  if (filtering->state != FILTERING_WAIT) {
+    return FILTERING_BUSY;
+  }
+
+  if (filtering->batches->beer_batches < 1) {
+    return FILTERING_NO_BEER;
+  }
+
+  filtering->started_at_seconds = now_seconds;
+  filtering->last_time_seconds = now_seconds;
+  filtering->batches->beer_batches--;
+  filtering->state = FILTERING_FILTER;
+
+  return FILTERING_STARTED;
 }
 
-//Add batch
-static void add_batch(void *self) {
-    ((Filtering *)self)->beer_batches++;
-}
+filtering_result_t filtering_update(filtering_t *filtering, uint64_t now_seconds) {
+  if (filtering->state != FILTERING_FILTER) {
+    return FILTERING_INVALID_ARGUMENT;
+  }
 
-static bool start(void *self) {
-    Filtering *m = self;
-    if (m->state == WAIT && m->beer_batches>0) {
-        m->c = 0;
-        m->beer_batches--;
-        m->state = FILTERING;
-        return true;
-    }
-    return false;
-}
+  if (now_seconds < filtering->last_time_seconds) {
+    return FILTERING_INVALID_TIME;
+  }
 
-static bool done(void *self) {
-    Filtering *m = self;
-    if (m->state == FILTERING && m->c >= m->duration) {
-        m->finished_batches++;
-        m->state = WAIT;
-        return true;
-    }
-    return false;
-}
+  filtering->last_time_seconds = now_seconds;
+  if (now_seconds - filtering->started_at_seconds < FILTERING_DURATION_SECONDS) {
+    return FILTERING_NO_CHANGE;
+  }
 
-//Making time pass while filtering
-static void tick(void *self) {
-    Filtering *m = self;
-    if (m->state == FILTERING) m->c++;
-}
+  filtering->batches->finished_batches++;
+  filtering->state = FILTERING_WAIT;
 
-const MachineType FILTERING_TYPE = {
-    "6 Filtering", 1, sizeof(Filtering),
-    init, duration, add_batch, start, done, tick
-};
+  return FILTERING_DONE;
+}

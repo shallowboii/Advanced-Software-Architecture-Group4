@@ -71,7 +71,7 @@ controller: build/whirlpooling
 # to localhost:1883 (fixed in heartbeat.c); without a broker there it only
 # prints a warning and keeps running.
 run: build/whirlpooling
-	KAFKA_BROKERS=$(KAFKA_BROKERS) ./build/whirlpooling whirlpooling-$(MACHINE_ID)
+	KAFKA_BROKERS=$(KAFKA_BROKERS) ./build/whirlpooling $(MACHINE_ID)
 
 clean:
 	rm -rf build
