@@ -16,6 +16,12 @@ import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import redis.clients.jedis.Jedis;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
+import org.apache.kafka.common.serialization.ByteArraySerializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
+import redis.clients.jedis.DefaultJedisClientConfig;
+import redis.clients.jedis.HostAndPort;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -45,11 +51,10 @@ public class GreedyScheduler {
     static final int TANK_STEP = 4;                 // step where the batch goes in a tank
 
     static final String BROKERS = env("KAFKA_BROKERS", "localhost:9092");
-    static final String CONSUMER_GROUP = "brewery-scheduler";
-    static final Pattern STATUS_TOPIC_PATTERN = Pattern.compile("^machine\\..+");
-    static final int SECONDS_PER_SIM_HOUR = 1;      // 1 sim hour = 1 real second
+    static final String CONSUMER_GROUP = "brewery-scheduler-" + java.util.UUID.randomUUID();
+    static final int SECONDS_PER_SIM_HOUR = Integer.parseInt(env("SECONDS_PER_SIM_HOUR", "1")); // 1 sim hour = 1 real second
     static final int WARMUP_S = 5;
-    static final int RUN_TIMEOUT_S = 3600;
+    static final int RUN_TIMEOUT_S = Integer.parseInt(env("RUN_TIMEOUT_S", "3600"));
     static final long POLL_TIMEOUT_MS = 100;
 
     static final String MQTT_URI = env("MQTT_URI", "tcp://localhost:1883");
@@ -61,6 +66,14 @@ public class GreedyScheduler {
     static final String REDIS_HOST = env("REDIS_HOST", "localhost");
     static final int REDIS_PORT = Integer.parseInt(env("REDIS_PORT", "6379"));
 
+    static final String TOPIC_PREFIX = env("TOPIC_PREFIX", "asaat67.");
+    static final Pattern STATUS_TOPIC_PATTERN =
+        Pattern.compile("^" + Pattern.quote(TOPIC_PREFIX) + "machine\\..+");
+
+    static String topic(int s) { return TOPIC_PREFIX + "machine." + PLANT[s].name(); }
+
+    static KafkaProducer<String, byte[]> producer;
+
     // ---- plant definition ----
     record Step(String name, int count, int durationHours, String output) {}
 
@@ -69,7 +82,7 @@ public class GreedyScheduler {
         new Step("lautering",    1, 2, "sweet_wort_batch"),
         new Step("boiling",      1, 2, "boiled_wort_batch"),
         new Step("whirlpooling", 1, 1, "clarified_wort_batch"),
-        new Step("fermentation", 5, 336, "green_beer_batch"),     // TANK_STEP
+        new Step("fermentation_maturation", 5, 336, "green_beer_batch"),     // TANK_STEP
         new Step("filtering",    1, 2, "filtered_beer_batch"),
     };
     static final int NUM_STEPS = PLANT.length;
@@ -112,7 +125,6 @@ public class GreedyScheduler {
     static int[] tankOwner = new int[MAX_MACHINES];              // batch index or -1
 
     static Jedis redis;
-    static KafkaProducer<String, String> producer;
     static Instant t0;
 
     static final List<HbEntry> hbTab = new ArrayList<>();
@@ -212,6 +224,8 @@ public class GreedyScheduler {
             o.setCleanSession(true);
             o.setKeepAliveInterval(60);
             o.setConnectionTimeout(3);
+            o.setUserName(env("MQTT_USERNAME", "admin"));
+            o.setPassword(env("MQTT_PASSWORD", "").toCharArray());
             hbClient.connect(o);
             hbClient.subscribe(HEARTBEAT_TOPIC, 0);
         } catch (Exception e) {
@@ -313,37 +327,22 @@ public class GreedyScheduler {
         }
 
         int m = batches[b].machine[s];
-        ObjectNode msg = JSON.createObjectNode();
-        msg.put("type", "START");
-        msg.put("machine_type", PLANT[s].name());
-        msg.put("machine_id", m + 1);
-        msg.put("batch_id", "batch" + batches[b].id);
-        msg.put("message_id", "batch" + batches[b].id + "-step" + (s + 1) + "-start");
-        msg.put("ts_utc", Instant.now().toString());
-        ObjectNode params = msg.putObject("params");
-        params.put("duration_s", (double) duration(s, m) * SECONDS_PER_SIM_HOUR);
-
-        producer.send(new ProducerRecord<>("machine." + PLANT[s].name(),
-                String.valueOf(m + 1), msg.toString()));
+        byte[] payload = Wire.encodeStart(PLANT[s].name(), m + 1, "batch" + batches[b].id,
+            "batch" + batches[b].id + "-step" + (s + 1) + "-start",
+            "duration_s", (double) duration(s, m) * SECONDS_PER_SIM_HOUR);
+        producer.send(new ProducerRecord<>(topic(s),
+            String.valueOf(m + 1), payload));
 
         st[b][s] = StepState.SENT;
         current[s][m] = b;
         log("%-16s machine %d START sent (batch %d)", PLANT[s].name(), m + 1, batches[b].id);
     }
 
-    static Status parseStatus(String json) {
-        try {
-            JsonNode j = JSON.readTree(json);
-            return new Status(
-                j.path("type").asText(""),
-                j.path("machine_type").asText(""),
-                j.path("machine_id").asInt(0),
-                j.path("batch_id").asText(""),
-                j.path("error_code").asText(""),
-                j.path("error_reason").asText(""));
-        } catch (Exception e) {
-            return null;
-        }
+    static Status parseStatus(byte[] payload) {
+        Wire.Msg w = Wire.decode(payload);
+        if (w == null) return null;
+        return new Status(w.type(), w.machineType(), w.machineId(), w.batchId(),
+                          w.errorCode(), w.errorReason());
     }
 
     static int stepOf(String type) {
@@ -402,8 +401,8 @@ public class GreedyScheduler {
         }
     }
 
-    static void pollKafka(KafkaConsumer<String, String> cons) {
-        for (ConsumerRecord<String, String> r : cons.poll(Duration.ofMillis(POLL_TIMEOUT_MS))) {
+    static void pollKafka(KafkaConsumer<String, byte[]> cons) {
+        for (ConsumerRecord<String, byte[]> r : cons.poll(Duration.ofMillis(POLL_TIMEOUT_MS))) {
             Status s = parseStatus(r.value());
             if (s != null) onStatus(s);
         }
@@ -427,7 +426,11 @@ public class GreedyScheduler {
             System.exit(1);
         }
 
-        redis = new Jedis(REDIS_HOST, REDIS_PORT);
+        String redisPw = env("REDIS_PASSWORD", "");
+        var redisCfg = DefaultJedisClientConfig.builder()
+                .ssl(Boolean.parseBoolean(env("REDIS_TLS", "false")));
+        if (!redisPw.isEmpty()) redisCfg.user(env("REDIS_USERNAME", "default")).password(redisPw);
+        redis = new Jedis(new HostAndPort(REDIS_HOST, REDIS_PORT), redisCfg.build());
         try { redis.ping(); }
         catch (Exception e) {
             System.err.println("Cannot connect to Redis: " + e.getMessage());
@@ -502,7 +505,7 @@ public class GreedyScheduler {
         Properties pp = new Properties();
         pp.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, BROKERS);
         pp.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
-        pp.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        pp.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName());
         pp.put(ProducerConfig.ACKS_CONFIG, "all");
         producer = new KafkaProducer<>(pp);
 
@@ -510,10 +513,10 @@ public class GreedyScheduler {
         cp.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, BROKERS);
         cp.put(ConsumerConfig.GROUP_ID_CONFIG, CONSUMER_GROUP);
         cp.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        cp.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        cp.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
         cp.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
         cp.put(ConsumerConfig.METADATA_MAX_AGE_CONFIG, "5000");   
-        KafkaConsumer<String, String> cons = new KafkaConsumer<>(cp);
+        KafkaConsumer<String, byte[]> cons = new KafkaConsumer<>(cp);
         cons.subscribe(STATUS_TOPIC_PATTERN);
 
         hbStart();
