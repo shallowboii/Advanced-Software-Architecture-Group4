@@ -1,5 +1,5 @@
 # =============================================================================
-# Dockerfile for one machine (this copy: whirlpooling)
+# Dockerfile for one machine (this copy: mashing)
 #
 # HOW TO USE THIS FOR YOUR OWN MACHINE
 #   1. Copy this file into your machine's folder, e.g. boiling/Dockerfile
@@ -34,9 +34,12 @@ ARG BINARY
 
 WORKDIR /app
 
-# Scheduler interface (machine.h, structure.h, greedy_scheduler.c).
-# Needed by machines that implement machine.h; harmless for the others.
-COPY scheduling/src/ scheduling/src/
+RUN apt-get update && apt-get install -y --no-install-recommends librdkafka-dev \
+ && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 https://github.com/LiamBindle/MQTT-C.git /mqtt-c
+
+COPY machine_commons/machine_mqtt/ machine_commons/machine_mqtt/
+COPY machine_commons/machine_kafka/ machine_commons/machine_kafka/
 
 # Your machine's folder (src, tests, examples, Makefile)
 COPY ${MACHINE}/ ${MACHINE}/
@@ -49,7 +52,7 @@ WORKDIR /app/${MACHINE}
 RUN make clean 2>/dev/null || true \
  && make test \
  && if grep -q '^scheduler-check:' Makefile; then make scheduler-check; fi \
- && make all
+ && make all MQTT_C_DIR=/mqtt-c
 
 # Same name for every machine, so the stage below doesn't need to change.
 RUN cp build/${BINARY} /machine
@@ -60,8 +63,11 @@ RUN cp build/${BINARY} /machine
 # Same Debian version as gcc:14, so the program runs without extra setup.
 FROM debian:bookworm-slim
 
+RUN apt-get update && apt-get install -y --no-install-recommends librdkafka1 \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /machine /usr/local/bin/machine
 
-# For now this runs the demo. When we have the real service (talking to the
-# backend), only BINARY above has to point at that program instead.
+# Set KAFKA_BROKERS at runtime; the argument is the machine number.
 ENTRYPOINT ["machine"]
+CMD ["0"]

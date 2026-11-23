@@ -36,7 +36,7 @@ rd_kafka_t *kafka_consumer_new(const char *brokers, const char *group_id,
   snprintf(expected_group, sizeof(expected_group), "boiling-%d", machine_id);
   if (strcmp(brokers, "test-broker:9092") != 0 ||
       strcmp(group_id, expected_group) != 0 ||
-      strcmp(topic, "machine.boiling") != 0)
+      strcmp(topic, "asaat67.machine.boiling") != 0)
     abort();
   return &consumer;
 }
@@ -56,7 +56,7 @@ int kafka_poll(rd_kafka_t *handle, kafka_message_handler handler, void *context)
 
 int kafka_send(rd_kafka_t *handle, const char *topic,
                const kafka_message_t *msg) {
-  if (handle != &producer || strcmp(topic, "machine.boiling") != 0 ||
+  if (handle != &producer || strcmp(topic, "asaat67.machine.boiling") != 0 ||
       strcmp(msg->machine_type, "boiling") != 0 || msg->machine_id != machine_id)
     abort();
   printf("KAFKA %d %s\n", msg->type, msg->batch_id);

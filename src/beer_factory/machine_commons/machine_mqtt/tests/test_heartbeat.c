@@ -161,6 +161,20 @@ static void reset(void) {
   last_heartbeat_s = 0;
 }
 
+static void check_cleanup_is_noop(void) {
+  unsigned int previous_close = close_calls;
+  unsigned int previous_destroy = destroy_calls;
+  unsigned int previous_disconnect = disconnect_calls;
+  unsigned int previous_sync = sync_calls;
+  unsigned int previous_publish = publish_calls;
+  heartbeat_destroy();
+  heartbeat_destroy();
+  heartbeat_update("boiling", 10);
+  assert(close_calls == previous_close && destroy_calls == previous_destroy);
+  assert(disconnect_calls == previous_disconnect && sync_calls == previous_sync);
+  assert(publish_calls == previous_publish);
+}
+
 static void test_initialization_failures(void) {
   reset();
   lookup_result = EAI_NONAME;
@@ -169,29 +183,34 @@ static void test_initialization_failures(void) {
   assert(*heartbeat_status() == MQTT_ERROR_SOCKET_ERROR);
   heartbeat_update("boiling", 10);
   assert(publish_calls == 0 && sync_calls == 0);
+  check_cleanup_is_noop();
 
   reset();
   tcp_result = -1;
   poll_result = 0;
   assert(*heartbeat_init("BOILING", 7) == MQTT_ERROR_SOCKET_ERROR);
   assert(init_calls == 0 && close_calls == 1 && free_calls == 1);
+  check_cleanup_is_noop();
 
   reset();
   tcp_result = -1;
   socket_error = ECONNREFUSED;
   assert(*heartbeat_init("BOILING", 7) == MQTT_ERROR_SOCKET_ERROR);
   assert(init_calls == 0 && close_calls == 1);
+  check_cleanup_is_noop();
 
   reset();
   init_result = MQTT_ERROR_RECV_BUFFER_TOO_SMALL;
   assert(*heartbeat_init("BOILING", 7) == init_result);
   assert(init_calls == 1 && connect_calls == 0 && close_calls == 1);
   assert(destroy_calls == 0);
+  check_cleanup_is_noop();
 
   reset();
   connect_result = MQTT_ERROR_SEND_BUFFER_IS_FULL;
   assert(*heartbeat_init("BOILING", 7) == connect_result);
   assert(connect_calls == 1 && close_calls == 1 && destroy_calls == 1);
+  check_cleanup_is_noop();
 }
 
 static void test_identity_and_timing(char *prefix, const char *name,
@@ -217,6 +236,18 @@ static void test_identity_and_timing(char *prefix, const char *name,
   assert(publish_calls == 2);
   heartbeat_destroy();
   assert(disconnect_calls == 1 && destroy_calls == 1 && close_calls == 1);
+  check_cleanup_is_noop();
+}
+
+static void test_reinitialization(void) {
+  reset();
+  assert(*heartbeat_init("BOILING", 7) == MQTT_OK);
+  assert(*heartbeat_init("BOILING", 7) == MQTT_OK);
+  assert(init_calls == 2 && connect_calls == 2);
+  assert(disconnect_calls == 1 && destroy_calls == 1 && close_calls == 1);
+  heartbeat_destroy();
+  assert(disconnect_calls == 2 && destroy_calls == 2 && close_calls == 2);
+  check_cleanup_is_noop();
 }
 
 static void test_runtime_failures(void) {
@@ -240,11 +271,14 @@ static void test_runtime_failures(void) {
 }
 
 int main(void) {
+  reset();
+  check_cleanup_is_noop();
   test_initialization_failures();
   test_identity_and_timing("BOILING", "BOILING-7", "boiling");
   test_identity_and_timing("FERMENTATION_MATURATION",
                            "FERMENTATION_MATURATION-7", "fermentation_maturation");
   test_runtime_failures();
+  test_reinitialization();
   puts("Heartbeat tests passed.");
   return 0;
 }

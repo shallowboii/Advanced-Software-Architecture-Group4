@@ -11,7 +11,7 @@ MQTT_COMMONS ?= ../machine_commons/machine_mqtt
 MQTT_C_DIR ?=
 MQTT_LIBS ?= -lmqttc
 
-.PHONY: all test mqtt clean
+.PHONY: all test test-reuse mqtt clean
 
 all: build/tank-mqtt
 
@@ -23,6 +23,12 @@ build/test-tank: src/tank.c src/tank.h tests/test_tank.c | build
 
 test: build/test-tank
 	./build/test-tank
+
+build/test-tank-reuse: src/tank.c src/tank.h tests/test_tank_reuse.c | build
+	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) -UNDEBUG src/tank.c tests/test_tank_reuse.c $(LDFLAGS) $(LDLIBS) -o $@
+
+test-reuse: build/test-tank-reuse
+	./build/test-tank-reuse
 
 # Use an installed MQTT-C library, or compile a checkout supplied by MQTT_C_DIR.
 ifneq ($(strip $(MQTT_C_DIR)),)

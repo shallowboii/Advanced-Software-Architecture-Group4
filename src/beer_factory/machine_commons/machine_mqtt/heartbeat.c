@@ -21,11 +21,11 @@
 
 #define HEARTBEAT_INTERVAL_S 5
 
-#define MQTT_HOST "localhost"
+#define MQTT_HOST "broker.hivemq.com"
 #define MQTT_PORT "1883"
-#define MQTT_NAME "boiling-1"
 
-int mqtt_fd;
+int mqtt_fd = -1;
+static int mqtt_initialized;
 int mqtt_machine_idx;
 struct mqtt_client client;
 uint8_t sendbuf[SENDBUFSZ], recvbuf[RECVBUFSZ];
@@ -75,6 +75,7 @@ static int connect_broker(const char *host, const char *port) {
 }
 
 enum MQTTErrors *heartbeat_init(char *machine_prefix, int machine_idx) {
+  heartbeat_destroy();
   mqtt_machine_idx = machine_idx;
 
   int fd = connect_broker(MQTT_HOST, MQTT_PORT);
@@ -124,9 +125,12 @@ enum MQTTErrors *heartbeat_init(char *machine_prefix, int machine_idx) {
     fprintf(stderr, "MQTT initialization: %s\n", mqtt_error_str(mqtt_result));
     pthread_mutex_destroy(&client.mutex);
     close(fd);
+    return &mqtt_result;
   }
 
   mqtt_fd = fd;
+  mqtt_initialized = 1;
+  last_heartbeat_s = 0;
   return &mqtt_result;
 }
 
@@ -142,12 +146,17 @@ enum MQTTErrors *heartbeat_send(const char *topic) {
 }
 
 void heartbeat_destroy(void) {
+  if (!mqtt_initialized)
+    return;
+
   if (mqtt_disconnect(&client) == MQTT_OK) {
     (void)mqtt_sync(&client);
   }
 
   pthread_mutex_destroy(&client.mutex);
   close(mqtt_fd);
+  mqtt_fd = -1;
+  mqtt_initialized = 0;
 }
 
 enum MQTTErrors *heartbeat_sync(void) {
@@ -158,7 +167,7 @@ enum MQTTErrors *heartbeat_sync(void) {
 enum MQTTErrors *heartbeat_update(const char *topic, uint64_t now_s) {
   uint64_t elapsed_s = (uint64_t)(now_s - last_heartbeat_s);
 
-  if (mqtt_result == MQTT_OK) {
+  if (mqtt_initialized && mqtt_result == MQTT_OK) {
     if (elapsed_s >= HEARTBEAT_INTERVAL_S) {
       heartbeat_send(topic);
       last_heartbeat_s = now_s;

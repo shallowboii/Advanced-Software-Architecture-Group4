@@ -11,7 +11,7 @@
 #include <unistd.h>
 
 #define MACHINE_TYPE "fermentation_maturation"
-#define TOPIC "machine." MACHINE_TYPE
+#define TOPIC "asaat67.machine." MACHINE_TYPE
 
 typedef struct {
   int id;

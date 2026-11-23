@@ -27,10 +27,6 @@ tank_result_t tank_start(tank_t *tank, uint64_t now_seconds) {
   }
 
   tank_shared_t *shared = tank->shared;
-  if (shared->started_batches >= TANK_MAX_BATCHES) {
-    return TANK_BATCH_LIMIT_REACHED;
-  }
-
   /* Wait -> CheckTankIdx -> Wait for an unselected broadcast recipient. */
   if (tank->tank_idx != shared->chosen_tank) {
     return TANK_NOT_SELECTED;

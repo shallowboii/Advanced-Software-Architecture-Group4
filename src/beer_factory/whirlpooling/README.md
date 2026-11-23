@@ -45,7 +45,7 @@ The Dockerfile is also meant as a template for the other machines: copy it to yo
 
 ## Controller (Kafka)
 
-Topic `machine.whirlpooling`, key = machine id. The machine handles only commands for its own id and skips everything else (statuses, including its own).
+Topic `asaat67.machine.whirlpooling`, key = machine id. The machine handles only commands for its own id and skips everything else (statuses, including its own).
 
 | Command | Whirlpool | Answer |
 | --- | --- | --- |

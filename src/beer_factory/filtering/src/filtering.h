@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-#define FILTERING_DURATION_SECONDS 4
+#define FILTERING_DURATION_SECONDS (4 * 3600)
 
 typedef enum { FILTERING_WAIT, FILTERING_FILTER } filtering_state_t;
 

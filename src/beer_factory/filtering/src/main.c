@@ -15,7 +15,7 @@
 #include <unistd.h>
 
 #define MACHINE_TYPE "filtering"
-#define TOPIC "machine." MACHINE_TYPE
+#define TOPIC "asaat67.machine." MACHINE_TYPE
 
 typedef struct {
   int id;
