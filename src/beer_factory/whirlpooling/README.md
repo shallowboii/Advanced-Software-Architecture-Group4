@@ -64,8 +64,11 @@ make run MACHINE_ID=1 MQTT_C_DIR=/opt/MQTT-C
 
 | Environment | Default | Meaning |
 | --- | --- | --- |
-| `KAFKA_BROKERS` | (required) | Kafka servers, e.g. `kafka:29092` |
+| `KAFKA_BROKERS` | `localhost:9092` | Compose's published Kafka listener; use `kafka:9093` inside its network |
 
-The MQTT heartbeat broker is fixed to `localhost:1883` in `heartbeat.c`.
+Heartbeats use Compose's RabbitMQ MQTT listener at `localhost:1883` with its
+`admin` / `admin123` credentials by default. Use `MQTT_HOST=rabbitmq` inside the
+Compose network. See the [shared heartbeat settings](../machine_commons/machine_mqtt/README.md)
+for environment overrides.
 
 Argument: `whirlpooling <machine-number>`, e.g. `./build/whirlpooling 1`. The Makefile's `MACHINE_ID` variable supplies this argument for `make run` (default: 1).

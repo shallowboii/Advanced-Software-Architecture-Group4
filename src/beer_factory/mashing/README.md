@@ -42,4 +42,8 @@ It prints `Mashing started`, then `done_mashing` at completion and stays running
 in `Wait`. With a broker available at
 `localhost:1883`, machine `0` connects as `MASHING-0` and sends heartbeats on the
 `mashing` topic every five seconds, including after completion.
+The default Kafka and MQTT connections match `../docker-compose.yml`, including
+RabbitMQ's `admin` / `admin123` credentials. See the
+[shared connection settings](../machine_commons/machine_mqtt/README.md) for
+environment overrides and addresses to use inside the Compose network.
 [Controller](src/main.c) · [Shared heartbeat code](../machine_commons/machine_mqtt/heartbeat.c)

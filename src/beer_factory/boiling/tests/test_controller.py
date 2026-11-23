@@ -8,11 +8,15 @@ BINARY = os.path.abspath(sys.argv.pop(1))
 
 
 class ControllerTests(unittest.TestCase):
-    def run_controller(self, *args, scenario="normal"):
+    def run_controller(self, *args, scenario="normal", brokers="test-broker:9092"):
+        env = {**os.environ, "CONTROLLER_SCENARIO": scenario}
+        if brokers is None:
+            env.pop("KAFKA_BROKERS", None)
+        else:
+            env["KAFKA_BROKERS"] = brokers
         return subprocess.run(
             [BINARY, *args], capture_output=True, text=True, timeout=5,
-            env={**os.environ, "CONTROLLER_SCENARIO": scenario,
-                 "KAFKA_BROKERS": "test-broker:9092"},
+            env=env,
         )
 
     def test_requires_one_argument(self):
@@ -29,6 +33,13 @@ class ControllerTests(unittest.TestCase):
                 result = self.run_controller(number)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn(f"INIT {number}\n", result.stdout)
+
+    def test_default_kafka_broker(self):
+        for brokers in [None, ""]:
+            with self.subTest(brokers=brokers):
+                result = self.run_controller("7", brokers=brokers)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("BROKERS localhost:9092\n", result.stdout)
 
     def test_batch_deadline_and_heartbeats_while_waiting(self):
         result = self.run_controller("7")

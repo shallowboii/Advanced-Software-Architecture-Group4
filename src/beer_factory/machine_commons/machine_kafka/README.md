@@ -35,6 +35,10 @@ Receive errors and invalid payloads are freed without invoking the handler or co
 
 Every participant needs one producer and one consumer, because a librdkafka handle is either one or the other. Each machine instance needs its **own** `group_id` (e.g. `whirlpooling-1`) so that it reads the whole topic. If instances shared a group, Kafka would split the partitions between them, and a machine could miss its own commands.
 
+Machine controllers default to `localhost:9092`, matching the published listener
+in `../../docker-compose.yml`. Set `KAFKA_BROKERS=kafka:9093` for machines running
+on the Compose `messaging` network, or override it with another broker address.
+
 ## Usage
 
 ### Machine side

@@ -64,10 +64,8 @@ int main(int argc, char **argv) {
   }
 
   const char *brokers = getenv("KAFKA_BROKERS");
-  if (brokers == NULL || brokers[0] == '\0') {
-    fprintf(stderr, "KAFKA_BROKERS is not set (e.g. kafka:29092).\n");
-    return EXIT_FAILURE;
-  }
+  if (brokers == NULL || brokers[0] == '\0')
+    brokers = "localhost:9092";
 
   controller_t c = {.id = (int)machine_number};
   filtering_init(&c.filtering, &c.batches);

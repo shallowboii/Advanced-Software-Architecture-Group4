@@ -4,6 +4,7 @@ services:
     container_name: rabbitmq
     restart: unless-stopped
     ports:
+      - "127.0.0.1:1883:1883"
       - "127.0.0.1:5672:5672"
       - "127.0.0.1:15672:15672"
     environment:
@@ -11,6 +12,7 @@ services:
       RABBITMQ_DEFAULT_PASS: admin123
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
     networks:
       - messaging
 

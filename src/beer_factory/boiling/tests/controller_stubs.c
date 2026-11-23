@@ -25,8 +25,10 @@ static rd_kafka_t producer, consumer;
 static int machine_id;
 
 rd_kafka_t *kafka_producer_new(const char *brokers) {
-  if (strcmp(brokers, "test-broker:9092") != 0)
+  if (strcmp(brokers, "test-broker:9092") != 0 &&
+      strcmp(brokers, "localhost:9092") != 0)
     abort();
+  printf("BROKERS %s\n", brokers);
   return &producer;
 }
 
@@ -34,7 +36,8 @@ rd_kafka_t *kafka_consumer_new(const char *brokers, const char *group_id,
                              const char *topic) {
   char expected_group[48];
   snprintf(expected_group, sizeof(expected_group), "boiling-%d", machine_id);
-  if (strcmp(brokers, "test-broker:9092") != 0 ||
+  if ((strcmp(brokers, "test-broker:9092") != 0 &&
+       strcmp(brokers, "localhost:9092") != 0) ||
       strcmp(group_id, expected_group) != 0 ||
       strcmp(topic, "asaat67.machine.boiling") != 0)
     abort();
