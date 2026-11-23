@@ -1,12 +1,51 @@
 #include "heartbeat.h"
+#include "machine_kafka.h"
 #include "mqtt.h"
 #include "tank.h"
 
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <unistd.h>
+
+#define MACHINE_TYPE "fermentation_maturation"
+#define TOPIC "asaat67.machine." MACHINE_TYPE
+
+typedef struct {
+  int id;
+  rd_kafka_t *producer;
+  tank_t tank;
+  tank_shared_t shared;
+  char batch_id[KAFKA_BATCH_LEN];
+  uint64_t now;
+} controller_t;
+
+static void send_status(controller_t *c, kafka_type_t type) {
+  kafka_message_t status = {0};
+  status.type = type;
+  snprintf(status.machine_type, sizeof(status.machine_type), "%s", MACHINE_TYPE);
+  status.machine_id = c->id;
+  memcpy(status.batch_id, c->batch_id, sizeof(status.batch_id));
+  kafka_send(c->producer, TOPIC, &status);
+}
+
+static void on_message(const kafka_message_t *msg, void *context) {
+  controller_t *c = context;
+  if (msg->machine_id != c->id || msg->type != KAFKA_START ||
+      c->tank.state != TANK_WAIT)
+    return;
+
+  c->shared.chosen_tank = c->id;
+  c->shared.clarified_wort_batches = 1;
+  if (tank_start(&c->tank, c->now) != TANK_STARTED)
+    return;
+  memcpy(c->batch_id, msg->batch_id, sizeof(c->batch_id));
+  printf("Fermentation started\n");
+  send_status(c, KAFKA_RUNNING);
+  /* STOP / FLUSH and start parameters are not handled, as in whirlpooling. */
+}
 
 int main(int argc, char **argv) {
   if (argc != 2) {
@@ -20,10 +59,13 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
 
-  tank_shared_t shared;
-  tank_t tank;
-  if (tank_shared_init(&shared) != TANK_OK ||
-      tank_init(&tank, &shared, machine_number) != TANK_OK) {
+  const char *brokers = getenv("KAFKA_BROKERS");
+  if (brokers == NULL || brokers[0] == '\0')
+    brokers = "localhost:9092";
+
+  controller_t c = {.id = (int)machine_number};
+  if (tank_shared_init(&c.shared) != TANK_OK ||
+      tank_init(&c.tank, &c.shared, c.id) != TANK_OK) {
     fprintf(stderr, "Could not initialize tank.\n");
     return EXIT_FAILURE;
   }
@@ -40,15 +82,10 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
 
-  shared.chosen_tank = machine_number;
-  shared.clarified_wort_batches = 100;
-  if (tank_start(&tank, started.tv_sec) != TANK_STARTED) {
-    fprintf(stderr, "Could not start fermentation.\n");
-    heartbeat_destroy();
-    return EXIT_FAILURE;
-  }
-
-  printf("Fermentation started\n");
+  char group_id[48];
+  snprintf(group_id, sizeof(group_id), "%s-%d", MACHINE_TYPE, c.id);
+  c.producer = kafka_producer_new(brokers);
+  rd_kafka_t *consumer = kafka_consumer_new(brokers, group_id, TOPIC);
 
   int status = EXIT_SUCCESS;
   while (1) {
@@ -59,21 +96,27 @@ int main(int argc, char **argv) {
       break;
     }
 
-    if (tank.state != TANK_WAIT) {
-      tank_state_t previous_state = tank.state;
-      if (tank_update(&tank, now.tv_sec) != TANK_OK) {
+    c.now = now.tv_sec;
+    kafka_poll(consumer, on_message, &c);
+    rd_kafka_poll(c.producer, 0);
+
+    if (c.tank.state != TANK_WAIT) {
+      tank_state_t previous_state = c.tank.state;
+      if (tank_update(&c.tank, c.now) != TANK_OK) {
         fprintf(stderr, "Could not update fermentation/maturation.\n");
         status = EXIT_FAILURE;
         break;
       }
 
       if (previous_state == TANK_FERMENTATION &&
-          tank.state == TANK_MATURATION) {
+          c.tank.state == TANK_MATURATION) {
         printf("Fermentation complete; maturation started.\n");
       }
 
-      if (tank.state == TANK_WAIT) {
+      if (c.tank.state == TANK_WAIT) {
         printf("Maturation complete; waiting.\n");
+        c.shared.beer_batches = 0; /* pumped to filtering */
+        send_status(&c, KAFKA_IDLE);
       }
     }
 
@@ -82,5 +125,7 @@ int main(int argc, char **argv) {
   }
 
   heartbeat_destroy();
+  kafka_consumer_close(consumer);
+  kafka_producer_close(c.producer);
   return status;
 }

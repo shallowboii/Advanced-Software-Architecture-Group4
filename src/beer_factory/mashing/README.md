@@ -18,10 +18,10 @@ boundary, busy starts, single completion, a second batch, and invalid timing and
 start arguments. They run with a C compiler and Make, independently of MQTT.
 [Test cases](tests/test_mashing.c)
 
-## Build and run the demo
+## Build and run the controller
 
-With MQTT-C installed as `libmqttc`, build with `make all`. If you have a local
-MQTT-C source checkout, supply its path instead.
+With librdkafka and MQTT-C installed as `libmqttc`, build with `make all`.
+If you have a local MQTT-C source checkout, supply its path instead.
 
 ```sh
 make all MQTT_C_DIR=/path/to/MQTT-C
@@ -30,12 +30,20 @@ make all MQTT_C_DIR=/path/to/MQTT-C
 Run the executable with a nonnegative machine number.
 
 ```sh
-./build/mashing 0
+KAFKA_BROKERS=localhost:9092 ./build/mashing 0
 ```
 
-The controller starts one demo batch at launch, standing in for a scheduler
-start command. It prints `Mashing started`, then prints `done_mashing` at
-completion and stays running in `Wait`. With a broker available at
+The controller waits for `KAFKA_START` on `asaat67.machine.mashing` for its machine
+number, using a separate consumer group (`mashing-<machine-number>`). It replies
+with `KAFKA_RUNNING`, then `KAFKA_IDLE` after two hours, preserving the batch ID.
+Messages for other machines, statuses, and starts received while busy are ignored.
+Stop, flush, and start parameters are not handled, as in the other controllers.
+It prints `Mashing started`, then `done_mashing` at completion and stays running
+in `Wait`. With a broker available at
 `localhost:1883`, machine `0` connects as `MASHING-0` and sends heartbeats on the
 `mashing` topic every five seconds, including after completion.
-[Demo controller](src/main.c) · [Shared heartbeat code](../machine_commons/machine_mqtt/heartbeat.c)
+The default Kafka and MQTT connections match `../docker-compose.yml`, including
+RabbitMQ's `admin` / `admin123` credentials. See the
+[shared connection settings](../machine_commons/machine_mqtt/README.md) for
+environment overrides and addresses to use inside the Compose network.
+[Controller](src/main.c) · [Shared heartbeat code](../machine_commons/machine_mqtt/heartbeat.c)

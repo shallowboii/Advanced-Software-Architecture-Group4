@@ -45,7 +45,7 @@ The Dockerfile is also meant as a template for the other machines: copy it to yo
 
 ## Controller (Kafka)
 
-Topic `machine.whirlpooling`, key = machine id. The machine handles only commands for its own id and skips everything else (statuses, including its own).
+Topic `asaat67.machine.whirlpooling`, key = machine id. The machine handles only commands for its own id and skips everything else (statuses, including its own).
 
 | Command | Whirlpool | Answer |
 | --- | --- | --- |
@@ -57,17 +57,18 @@ Topic `machine.whirlpooling`, key = machine id. The machine handles only command
 The controller needs librdkafka and MQTT-C, so on Windows run it in Linux (WSL or a container):
 
 ```bash
-TIME_SCALE=600 make run MQTT_C_DIR=/opt/MQTT-C   # 1 h run = 6 s
+make run MACHINE_ID=1 MQTT_C_DIR=/opt/MQTT-C
 ```
 
-`MQTT_C_DIR` points to an MQTT-C checkout; leave it out to link an installed `-lmqttc`. For a full test with a Kafka broker and a start command, see the "Test" section in `../machine_commons/machine_kafka/README.md`.
+`MQTT_C_DIR` points to an MQTT-C checkout; leave it out to link an installed `-lmqttc`. The controller uses the same numeric machine argument and clock updates as boiling. It waits for `KAFKA_START`, replies with `KAFKA_RUNNING`, and sends `KAFKA_IDLE` with the same batch ID after the one-hour run. Starts received while busy are ignored.
 
 | Environment | Default | Meaning |
 | --- | --- | --- |
-| `KAFKA_BROKERS` | (required) | Kafka servers, e.g. `kafka:29092` |
-| `MACHINE_ID` | number in the machine name | Kafka `machine_id` |
-| `TIME_SCALE` | 1 | simulated seconds per real second |
+| `KAFKA_BROKERS` | `localhost:9092` | Compose's published Kafka listener; use `kafka:9093` inside its network |
 
-The MQTT heartbeat broker is fixed to `localhost:1883` in `heartbeat.c`.
+Heartbeats use Compose's RabbitMQ MQTT listener at `localhost:1883` with its
+`admin` / `admin123` credentials by default. Use `MQTT_HOST=rabbitmq` inside the
+Compose network. See the [shared heartbeat settings](../machine_commons/machine_mqtt/README.md)
+for environment overrides.
 
-Argument: `whirlpooling [machine-name]`, default `whirlpooling-1`.
+Argument: `whirlpooling <machine-number>`, e.g. `./build/whirlpooling 1`. The Makefile's `MACHINE_ID` variable supplies this argument for `make run` (default: 1).

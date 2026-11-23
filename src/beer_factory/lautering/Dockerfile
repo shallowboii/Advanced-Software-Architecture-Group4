@@ -14,10 +14,14 @@ ARG BINARY
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends librdkafka-dev \
+ && rm -rf /var/lib/apt/lists/*
+
 # MQTT-C sources; the Makefile compiles them in via MQTT_C_DIR.
 RUN git clone --depth 1 https://github.com/LiamBindle/MQTT-C.git /mqtt-c
 
 COPY machine_commons/machine_mqtt/ machine_commons/machine_mqtt/
+COPY machine_commons/machine_kafka/ machine_commons/machine_kafka/
 COPY ${MACHINE}/ ${MACHINE}/
 
 WORKDIR /app/${MACHINE}
@@ -32,6 +36,9 @@ RUN cp build/${BINARY} /machine
 
 # ---- Stage 2: runtime -------------------------------------------------------
 FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends librdkafka1 \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /machine /usr/local/bin/machine
 

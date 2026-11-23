@@ -13,7 +13,7 @@ PKG_CONFIG ?= pkg-config
 KAFKA_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags rdkafka 2>/dev/null)
 KAFKA_LIBS ?= $(shell $(PKG_CONFIG) --libs rdkafka 2>/dev/null || echo -lrdkafka)
 
-.PHONY: all libs clean
+.PHONY: all test libs clean
 
 all: build/libmachinekafka.a
 
@@ -25,6 +25,12 @@ build/machine_kafka.o: machine_kafka.c machine_kafka.h | build
 
 build/libmachinekafka.a: build/machine_kafka.o
 	$(AR) rcs $@ $^
+
+build/test-machine-kafka: tests/test_machine_kafka.c machine_kafka.c machine_kafka.h | build
+	$(CC) $(CPPFLAGS) $(KAFKA_CFLAGS) -I. $(CFLAGS) -UNDEBUG tests/test_machine_kafka.c machine_kafka.c $(LDFLAGS) $(KAFKA_LIBS) $(LDLIBS) -o $@
+
+test: build/test-machine-kafka
+	./build/test-machine-kafka
 
 # Prints the flags a machine needs to link against this library.
 libs:

@@ -3,6 +3,8 @@
     "file": "src/main.c",
     "arguments": [
       "/usr/bin/cc",
+      "-D_POSIX_C_SOURCE=200809L",
+      "-I../machine_commons/machine_kafka",
       "-Isrc",
       "-I../machine_commons/machine_mqtt",
       "-std=c11",
@@ -23,6 +25,8 @@
     "file": "src/boiling.c",
     "arguments": [
       "/usr/bin/cc",
+      "-D_POSIX_C_SOURCE=200809L",
+      "-I../machine_commons/machine_kafka",
       "-Isrc",
       "-I../machine_commons/machine_mqtt",
       "-std=c11",
@@ -43,6 +47,8 @@
     "file": "../machine_commons/machine_mqtt/heartbeat.c",
     "arguments": [
       "/usr/bin/cc",
+      "-D_POSIX_C_SOURCE=200809L",
+      "-I../machine_commons/machine_kafka",
       "-Isrc",
       "-I../machine_commons/machine_mqtt",
       "-std=c11",
@@ -52,6 +58,28 @@
       "-Werror",
       "-O2",
       "../machine_commons/machine_mqtt/heartbeat.c",
+      "-pthread",
+      "-o",
+      "build/boiling-mqtt"
+    ],
+    "directory": "/Users/nicola/Workspace/Advanced-Software-Architecture-Group4/src/beer_factory/boiling",
+    "output": "build/boiling-mqtt"
+  },
+  {
+    "file": "../machine_commons/machine_kafka/machine_kafka.c",
+    "arguments": [
+      "/usr/bin/cc",
+      "-D_POSIX_C_SOURCE=200809L",
+      "-I../machine_commons/machine_kafka",
+      "-Isrc",
+      "-I../machine_commons/machine_mqtt",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-O2",
+      "../machine_commons/machine_kafka/machine_kafka.c",
       "-pthread",
       "-o",
       "build/boiling-mqtt"

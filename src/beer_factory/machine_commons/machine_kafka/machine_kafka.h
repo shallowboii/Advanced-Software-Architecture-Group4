@@ -6,7 +6,7 @@
  * A thin wrapper around librdkafka. Every machine and the scheduler use it.
  *
  * How it works:
- *  - One topic per machine type, e.g. "machine.whirlpooling".
+ *  - One topic per machine type, e.g. "asaat67.machine.whirlpooling".
  *    Commands (scheduler -> machine) and statuses (machine -> scheduler)
  *    go on the same topic.
  *  - The message key is the machine id, so all messages for one machine
@@ -77,7 +77,9 @@ typedef void (*kafka_message_handler)(const kafka_message_t *msg,
 /* Create a producer that talks to brokers, e.g. "localhost:9092". */
 rd_kafka_t *kafka_producer_new(const char *brokers);
 
-/* Send msg on topic. The key is msg->machine_id. */
+/* Send msg on topic. The key is msg->machine_id.
+ * Returns 0 if queued, -1 on a queueing error (also printed to stderr).
+ * Successful queueing does not guarantee delivery; see delivery reports. */
 int kafka_send(rd_kafka_t *producer, const char *topic,
                const kafka_message_t *msg);
 
@@ -92,7 +94,9 @@ rd_kafka_t *kafka_consumer_new(const char *brokers, const char *group_id,
                                const char *topic);
 
 /* Wait up to KAFKA_POLL_TIMEOUT_MS for one message and pass it to handler.
- * Returns 1 if a message was handled, 0 if none came. */
+ * Returns 1 if a message was handled, 0 if none came, -1 on a consumer
+ * error or invalid payload. Invalid messages are freed without calling the
+ * handler or committing their offsets. */
 int kafka_poll(rd_kafka_t *consumer, kafka_message_handler handler,
                void *context);
 

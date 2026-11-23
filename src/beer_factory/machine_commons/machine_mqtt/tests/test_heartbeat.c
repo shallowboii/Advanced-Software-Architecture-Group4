@@ -7,6 +7,7 @@
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
@@ -25,13 +26,15 @@ static unsigned int destroy_calls, free_calls;
 static machine_heartbeat_t published;
 static const char *expected_name;
 static const char *expected_topic;
+static const char *expected_host, *expected_port;
+static const char *expected_username, *expected_password;
 static enum MQTTErrors sync_result;
 static unsigned int sync_calls, disconnect_calls;
 
 int test_getaddrinfo(const char *host, const char *port,
                      const struct addrinfo *hints, struct addrinfo **result) {
-  assert(strcmp(host, "localhost") == 0);
-  assert(strcmp(port, "1883") == 0);
+  assert(strcmp(host, expected_host) == 0);
+  assert(strcmp(port, expected_port) == 0);
   assert(hints->ai_family == AF_UNSPEC);
   assert(hints->ai_socktype == SOCK_STREAM);
   if (lookup_result != 0) return lookup_result;
@@ -116,7 +119,12 @@ enum MQTTErrors mqtt_connect(
   assert(actual == &client);
   assert(strcmp(id, expected_name) == 0);
   assert(will_topic == NULL && will_message == NULL && will_size == 0);
-  assert(username == NULL && password == NULL);
+  assert((username == NULL) == (expected_username == NULL));
+  assert((password == NULL) == (expected_password == NULL));
+  if (username != NULL)
+    assert(strcmp(username, expected_username) == 0);
+  if (password != NULL)
+    assert(strcmp(password, expected_password) == 0);
   assert(flags == MQTT_CONNECT_CLEAN_SESSION && keep_alive == 60);
   return connect_result;
 }
@@ -150,6 +158,10 @@ enum MQTTErrors mqtt_disconnect(struct mqtt_client *actual) {
 }
 
 static void reset(void) {
+  unsetenv("MQTT_HOST");
+  unsetenv("MQTT_PORT");
+  unsetenv("MQTT_USERNAME");
+  unsetenv("MQTT_PASSWORD");
   init_result = connect_result = publish_result = sync_result = MQTT_OK;
   lookup_result = tcp_result = socket_error = 0;
   poll_result = 1;
@@ -157,8 +169,26 @@ static void reset(void) {
   destroy_calls = free_calls = sync_calls = disconnect_calls = 0;
   expected_name = "BOILING-7";
   expected_topic = "boiling";
+  expected_host = "localhost";
+  expected_port = "1883";
+  expected_username = "admin";
+  expected_password = "admin123";
   /* Isolate scheduling tests without relying on reinitialization semantics. */
   last_heartbeat_s = 0;
+}
+
+static void check_cleanup_is_noop(void) {
+  unsigned int previous_close = close_calls;
+  unsigned int previous_destroy = destroy_calls;
+  unsigned int previous_disconnect = disconnect_calls;
+  unsigned int previous_sync = sync_calls;
+  unsigned int previous_publish = publish_calls;
+  heartbeat_destroy();
+  heartbeat_destroy();
+  heartbeat_update("boiling", 10);
+  assert(close_calls == previous_close && destroy_calls == previous_destroy);
+  assert(disconnect_calls == previous_disconnect && sync_calls == previous_sync);
+  assert(publish_calls == previous_publish);
 }
 
 static void test_initialization_failures(void) {
@@ -169,29 +199,34 @@ static void test_initialization_failures(void) {
   assert(*heartbeat_status() == MQTT_ERROR_SOCKET_ERROR);
   heartbeat_update("boiling", 10);
   assert(publish_calls == 0 && sync_calls == 0);
+  check_cleanup_is_noop();
 
   reset();
   tcp_result = -1;
   poll_result = 0;
   assert(*heartbeat_init("BOILING", 7) == MQTT_ERROR_SOCKET_ERROR);
   assert(init_calls == 0 && close_calls == 1 && free_calls == 1);
+  check_cleanup_is_noop();
 
   reset();
   tcp_result = -1;
   socket_error = ECONNREFUSED;
   assert(*heartbeat_init("BOILING", 7) == MQTT_ERROR_SOCKET_ERROR);
   assert(init_calls == 0 && close_calls == 1);
+  check_cleanup_is_noop();
 
   reset();
   init_result = MQTT_ERROR_RECV_BUFFER_TOO_SMALL;
   assert(*heartbeat_init("BOILING", 7) == init_result);
   assert(init_calls == 1 && connect_calls == 0 && close_calls == 1);
   assert(destroy_calls == 0);
+  check_cleanup_is_noop();
 
   reset();
   connect_result = MQTT_ERROR_SEND_BUFFER_IS_FULL;
   assert(*heartbeat_init("BOILING", 7) == connect_result);
   assert(connect_calls == 1 && close_calls == 1 && destroy_calls == 1);
+  check_cleanup_is_noop();
 }
 
 static void test_identity_and_timing(char *prefix, const char *name,
@@ -217,6 +252,40 @@ static void test_identity_and_timing(char *prefix, const char *name,
   assert(publish_calls == 2);
   heartbeat_destroy();
   assert(disconnect_calls == 1 && destroy_calls == 1 && close_calls == 1);
+  check_cleanup_is_noop();
+}
+
+static void test_reinitialization(void) {
+  reset();
+  assert(*heartbeat_init("BOILING", 7) == MQTT_OK);
+  assert(*heartbeat_init("BOILING", 7) == MQTT_OK);
+  assert(init_calls == 2 && connect_calls == 2);
+  assert(disconnect_calls == 1 && destroy_calls == 1 && close_calls == 1);
+  heartbeat_destroy();
+  assert(disconnect_calls == 2 && destroy_calls == 2 && close_calls == 2);
+  check_cleanup_is_noop();
+}
+
+static void test_broker_settings(void) {
+  reset();
+  expected_host = "rabbitmq";
+  expected_port = "1884";
+  expected_username = "machine";
+  expected_password = "test-password";
+  assert(setenv("MQTT_HOST", expected_host, 1) == 0);
+  assert(setenv("MQTT_PORT", expected_port, 1) == 0);
+  assert(setenv("MQTT_USERNAME", expected_username, 1) == 0);
+  assert(setenv("MQTT_PASSWORD", expected_password, 1) == 0);
+  assert(*heartbeat_init("BOILING", 7) == MQTT_OK);
+  assert(init_calls == 1 && connect_calls == 1);
+  heartbeat_destroy();
+
+  reset();
+  expected_username = expected_password = NULL;
+  assert(setenv("MQTT_USERNAME", "", 1) == 0);
+  assert(setenv("MQTT_PASSWORD", "", 1) == 0);
+  assert(*heartbeat_init("BOILING", 7) == MQTT_OK);
+  heartbeat_destroy();
 }
 
 static void test_runtime_failures(void) {
@@ -240,11 +309,15 @@ static void test_runtime_failures(void) {
 }
 
 int main(void) {
+  reset();
+  check_cleanup_is_noop();
   test_initialization_failures();
   test_identity_and_timing("BOILING", "BOILING-7", "boiling");
   test_identity_and_timing("FERMENTATION_MATURATION",
                            "FERMENTATION_MATURATION-7", "fermentation_maturation");
   test_runtime_failures();
+  test_reinitialization();
+  test_broker_settings();
   puts("Heartbeat tests passed.");
   return 0;
 }
