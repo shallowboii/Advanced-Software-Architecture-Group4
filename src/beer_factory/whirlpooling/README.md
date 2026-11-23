@@ -30,13 +30,13 @@ make clean  # deletes build/
 With Docker, from `src/beer_factory`:
 
 ```bash
-docker build -f whirlpooling/Dockerfile -t whirlpooling .
-docker run --rm whirlpooling
+docker compose up -d --build
 ```
 
-The Docker build runs the tests first, so if they fail the image isn't built.
-
-The Dockerfile is also meant as a template for the other machines: copy it to your folder, change `MACHINE` and `BINARY` at the top, and you're done (the comments in it explain the rest).
+This builds all six machine images and starts their controllers with RabbitMQ,
+Kafka and Redis. Whirlpooling runs as machine `0`, uses `kafka:9093` and
+`rabbitmq:1883`, and waits for broker readiness and Kafka topic setup. Its Docker
+build runs the core tests before building the controller.
 
 ## Differences from boiling
 

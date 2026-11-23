@@ -6,11 +6,23 @@ seconds on their machine-type topic (for example, `boiling`). The payload is
 
 ## Run with the Compose services
 
-From `src/beer_factory`, start the messaging services:
+From `src/beer_factory`, build the machine images and start the full stack:
 
 ```sh
-docker compose up -d rabbitmq kafka
+docker compose up -d --build
 ```
+
+This starts one controller for each of the six machine types, with machine
+number `0`, alongside RabbitMQ, Kafka and Redis. Controllers wait for RabbitMQ's
+MQTT listener and Kafka's topic setup before starting. The topic setup creates
+`asaat67.machine.<machine-type>` for each machine and exits successfully.
+
+Each Docker build runs the machine's tests before building its controller. The
+tank image uses `make test-reuse`; its legacy test suite still targets an older
+API. Images contain the controller and its runtime dependencies.
+
+Use `docker compose logs -f` to inspect the stack and `docker compose down` to
+stop it. Broker data volumes are retained.
 
 The RabbitMQ service enables its MQTT plugin and exposes port 1883. Machines
 running on the host use the published ports by default:
