@@ -22,8 +22,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,25 +30,24 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.regex.Pattern;
 
 /**
- * Greedy brewery scheduler (Java port of star_scheduler.c).
+ * Star scheduler 
  *
- * Plans machine assignment greedily, then drives the run from the status
- * messages the real machines send over Kafka. Heartbeats arrive over MQTT.
  *
- * Run:  mvn -q compile exec:java -Dexec.args="3"
+ * Run:  mvn -q compile exec:java -Dexec.mainClass=StarBrewery -Dexec.args="3"
  */
-public class Brewery {
+public class StarScheduler {
 
     // ---- configuration ---------------------------------------------------
     static final int MAX_BATCHES = 64;
     static final int DEFAULT_BATCHES = 6;
-    static final int RELEASE_INTERVAL = 0;          // hours between releases
-    static final int TANK_STEP = 4;                 // step where the batch goes in a tank
+    static final int TANK_STEP = 4;          // maturation
+    static final int WHIRLPOOL_STEP = 3;     // produces clarified wort
+    static final int FREE_TANK_MIN = 4;      // start_mashing guard: free_tank >= 4
 
     static final String BROKERS = env("KAFKA_BROKERS", "localhost:9092");
     static final String CONSUMER_GROUP = "brewery-scheduler";
     static final Pattern STATUS_TOPIC_PATTERN = Pattern.compile("^machine\\..+");
-    static final int SECONDS_PER_SIM_HOUR = 1;      // 1 sim hour = 1 real second
+    static final int SECONDS_PER_SIM_HOUR = 1;
     static final int WARMUP_S = 5;
     static final int RUN_TIMEOUT_S = 3600;
     static final long POLL_TIMEOUT_MS = 100;
@@ -64,7 +61,7 @@ public class Brewery {
     static final String REDIS_HOST = env("REDIS_HOST", "localhost");
     static final int REDIS_PORT = Integer.parseInt(env("REDIS_PORT", "6379"));
 
-    // ---- plant definition (TODO: replace with your real structure.c data) ----
+    // ---- plant definition  ----
     record Step(String name, int count, int durationHours, String output) {}
 
     static final Step[] PLANT = {
@@ -72,14 +69,14 @@ public class Brewery {
         new Step("lautering",    1, 2, "sweet_wort_batch"),
         new Step("boiling",      1, 2, "boiled_wort_batch"),
         new Step("whirlpooling", 1, 1, "clarified_wort_batch"),
-        new Step("fermentation", 3, 8, "green_beer_batch"),     // TANK_STEP
+        new Step("fermentation", 5, 336, "green_beer_batch"),     // TANK_STEP, needs >= FREE_TANK_MIN
         new Step("filtering",    1, 2, "filtered_beer_batch"),
     };
     static final int NUM_STEPS = PLANT.length;
     static final int MAX_MACHINES = Arrays.stream(PLANT).mapToInt(Step::count).max().orElse(1);
 
-    /** Same role as PLANT[s]->duration(machine). */
-    static int duration(int step, int machine) {
+    /** Same role as PLANT[s]->duration(machine), in sim hours. */
+    static int durationHours(int step, int machine) {
         return PLANT[step].durationHours();
     }
 
@@ -88,14 +85,9 @@ public class Brewery {
 
     static class Batch {
         int id;
-        int release;
-        int[] start = new int[NUM_STEPS];
-        int[] machine = new int[NUM_STEPS];
-        int tank;
-        int end;
+        int tank = -1;    // tank for this batch, -1 until chosen
     }
 
-    /** A status message from a machine. */
     record Status(String type, String machineType, int machineId, String batchId,
                   String errorCode, String errorReason) {}
 
@@ -108,12 +100,19 @@ public class Brewery {
     // ---- run-time state --------------------------------------------------
     static final ObjectMapper JSON = new ObjectMapper();
 
-    static Batch[] batches;
-    static int n;
-    static StepState[][] st;
-    static boolean[] failed;
-    static int[][] current = new int[NUM_STEPS][MAX_MACHINES];   // batch index or -1
-    static int[] tankOwner = new int[MAX_MACHINES];              // batch index or -1
+    static final Batch[] batches = new Batch[MAX_BATCHES];
+    static int n;                 // batches wanted
+    static int started;           // batches released so far
+    static final StepState[][] st = new StepState[MAX_BATCHES][NUM_STEPS];
+    static final boolean[] failed = new boolean[MAX_BATCHES];
+    static final int[][] current = new int[NUM_STEPS][MAX_MACHINES];   // batch index or -1
+
+    // Variables of the UPPAAL model
+    static boolean isMashing;
+    static final int[] tanksStatus = new int[MAX_MACHINES];            // 0 = free, 1 = in use
+    static int clarifiedWortBatches;                                   // waiting for a tank
+    static int chosenTank;
+    static final long[] tankEnd = new long[MAX_MACHINES];              
 
     static Jedis redis;
     static KafkaProducer<String, String> producer;
@@ -188,16 +187,17 @@ public class Brewery {
     }
 
     // ---- heartbeats (MQTT) -----------------------------------------------
-    /**
-     * ASSUMPTION: the C sender publishes a raw machine_heartbeat_t struct. Its
-     * layout isn't in the code I was given, so this reads a NUL-terminated
-     * machine name from the start of the payload. Adjust to the real layout,
-     * or better, make the machines publish JSON.
-     */
+   
+    static final int HB_SIZE = 4 + 32;
+    
     static String parseHeartbeatName(byte[] p) {
+        if (p.length != HB_SIZE) {
+            System.err.printf("MQTT: heartbeat of %d bytes ignored (expected %d)%n", p.length, HB_SIZE);
+            return "";
+        }
         int len = 0;
-        while (len < p.length && p[len] != 0) len++;
-        return new String(p, 0, len, StandardCharsets.US_ASCII);
+        while (len < 31 && p[4 + len] != 0) len++;
+        return new String(p, 4, len, StandardCharsets.US_ASCII);
     }
 
     static void hbStart() {
@@ -263,64 +263,51 @@ public class Brewery {
             }
     }
 
-    // ---- scheduling rules ------------------------------------------------
+    // ---- model helper functions ------------------------------------------
+    static double durationS(int s, int m) {
+        return (double) durationHours(s, m) * SECONDS_PER_SIM_HOUR;
+    }
+
     static int freeTank() {
-        for (int m = 0; m < PLANT[TANK_STEP].count(); m++)
-            if (tankOwner[m] < 0) return m;
+        int free = 0;
+        for (int t = 0; t < PLANT[TANK_STEP].count(); t++)
+            if (tanksStatus[t] == 0) free++;
+        return free;
+    }
+
+    static double leadTimeS() {
+        double sum = 0;
+        for (int s = 0; s < TANK_STEP; s++) sum += durationS(s, 0);
+        return sum;
+    }
+
+    static final int TANK_TIME_LEFT_LIMIT_HOURS = 6;
+
+    static boolean anyAlmostDone() {
+        long now = Instant.now().getEpochSecond();
+        for (int t = 0; t < PLANT[TANK_STEP].count(); t++) {
+            int b = current[TANK_STEP][t];
+            if (b < 0 || st[b][TANK_STEP] != StepState.RUNNING) continue;
+            if (tankEnd[t] - now <= (long) TANK_TIME_LEFT_LIMIT_HOURS * SECONDS_PER_SIM_HOUR)
+                return true;
+        }
+        return false;
+    }
+
+    static int idleMachine(int s) {
+        for (int m = 0; m < PLANT[s].count(); m++)
+            if (current[s][m] < 0) return m;
         return -1;
     }
 
-    static void releaseTanksOf(int b) {
-        for (int m = 0; m < MAX_MACHINES; m++)
-            if (tankOwner[m] == b) tankOwner[m] = -1;
-    }
-
-    static int prevActive(int b) {
-        for (int p = b - 1; p >= 0; p--) if (!failed[p]) return p;
+    static int selectFreeTank() {
+        for (int t = 0; t < PLANT[TANK_STEP].count(); t++)
+            if (tanksStatus[t] == 0 && current[TANK_STEP][t] < 0) return t;
         return -1;
     }
 
-    static boolean canStart(int b, int s) {
-        int m = batches[b].machine[s];
-
-        if (failed[b]) return false;
-        if (st[b][s] != StepState.PENDING) return false;
-        if (s > 0 && st[b][s - 1] != StepState.DONE) return false;
-
-        if (s == 0) {
-            int p = prevActive(b);
-            if (p >= 0) {
-                StepState ps = st[p][TANK_STEP];
-                if (ps != StepState.RUNNING && ps != StepState.DONE) return false;
-            }
-            if (freeTank() < 0) return false;
-        }
-
-        if (current[s][m] >= 0) return false;
-
-        if (s != TANK_STEP)
-            for (int p = 0; p < b; p++) {
-                if (failed[p]) continue;
-                if (batches[p].machine[s] == m && st[p][s] != StepState.DONE) return false;
-            }
-        return true;
-    }
-
-    // ---- kafka -----------------------------------------------------------
-    /**
-     * ASSUMPTION: machine_kafka.c serializes mk_message_t as JSON with these
-     * field names. If it uses another format, change sendStart and parseStatus.
-     */
-    static void sendStart(int b, int s) {
-        if (s == 0) {
-            int t = freeTank();
-            tankOwner[t] = b;
-            batches[b].tank = t;
-            batches[b].machine[TANK_STEP] = t;
-            log("batch %d reserves tank %d", batches[b].id, t + 1);
-        }
-
-        int m = batches[b].machine[s];
+    // ---- commands --------------------------------------------------------
+    static void sendStart(int b, int s, int m) {
         ObjectNode msg = JSON.createObjectNode();
         msg.put("type", "START");
         msg.put("machine_type", PLANT[s].name());
@@ -328,16 +315,63 @@ public class Brewery {
         msg.put("batch_id", "batch" + batches[b].id);
         msg.put("message_id", "batch" + batches[b].id + "-step" + (s + 1) + "-start");
         msg.put("ts_utc", Instant.now().toString());
-        ObjectNode params = msg.putObject("params");
-        params.put("duration_s", (double) duration(s, m) * SECONDS_PER_SIM_HOUR);
+        msg.putObject("params").put("duration_s", durationS(s, m));
 
         producer.send(new ProducerRecord<>("machine." + PLANT[s].name(),
-                PLANT[s].name() + "-" + (m + 1), msg.toString()));
+                String.valueOf(m + 1), msg.toString()));
 
         st[b][s] = StepState.SENT;
         current[s][m] = b;
         log("%-16s machine %d START sent (batch %d)", PLANT[s].name(), m + 1, batches[b].id);
     }
+
+    static void edgeStartMashing() {
+        int m = idleMachine(0);
+        if (m < 0) return;
+
+        int b = started++;
+        batches[b] = new Batch();
+        batches[b].id = b + 1;
+        isMashing = true;
+        sendStart(b, 0, m);
+    }
+
+    static boolean canMash() {
+        return started < n && !isMashing && (freeTank() >= FREE_TANK_MIN || anyAlmostDone());
+    }
+
+    static boolean inLocation(int b, int s) {
+        return !failed[b] && st[b][s - 1] == StepState.DONE && st[b][s] == StepState.PENDING;
+    }
+
+    static void edgeStart(int b, int s) {
+        int m;
+        if (s == TANK_STEP) {
+            if (clarifiedWortBatches < 1) return;
+            m = selectFreeTank();
+            if (m < 0) return;
+            chosenTank = m;
+            tanksStatus[m] = 1;
+            clarifiedWortBatches--;
+            batches[b].tank = m;
+            log("batch %d goes to tank %d", batches[b].id, chosenTank + 1);
+        } else {
+            m = idleMachine(s);
+            if (m < 0) return;
+        }
+        sendStart(b, s, m);
+    }
+
+    static void fireEdges() {
+        // committed locations first, oldest batch first
+        for (int b = 0; b < started; b++)
+            for (int s = 1; s < NUM_STEPS; s++)
+                if (inLocation(b, s)) edgeStart(b, s);
+
+        if (canMash()) edgeStartMashing();
+    }
+
+    // ---- status handling -------------------------------------------------
 
     static Status parseStatus(String json) {
         try {
@@ -382,6 +416,7 @@ public class Brewery {
                 log("%-16s machine %d running (batch %d)", PLANT[s].name(), m + 1, batches[b].id);
                 recordStart(s, m, batches[b].id, hour);
                 if (s == TANK_STEP) {
+                    tankEnd[m] = Instant.now().getEpochSecond() + (long) durationS(s, m);
                     log("batch %d is in tank %d", batches[b].id, m + 1);
                     recordTank(batches[b].id, m);
                 }
@@ -392,16 +427,20 @@ public class Brewery {
                 current[s][m] = -1;
                 log("%-16s machine %d done (batch %d)", PLANT[s].name(), m + 1, batches[b].id);
                 recordDone(s);
+                if (s == 0) isMashing = false;
+                if (s == WHIRLPOOL_STEP) clarifiedWortBatches++;
                 if (s == TANK_STEP) {
-                    tankOwner[m] = -1;
+                    tanksStatus[m] = 0;
                     log("tank %d is free", m + 1);
                 }
+                if (s == NUM_STEPS - 1) log("batch %d is finished", batches[b].id);
             }
             case "ERROR" -> {
                 st[b][s] = StepState.FAILED;
                 failed[b] = true;
                 current[s][m] = -1;
-                releaseTanksOf(b);
+                if (s == 0) isMashing = false;
+                if (s == TANK_STEP) tanksStatus[m] = 0;   // failed batch leaves its tank empty
                 err("ERROR %s machine %d (batch %d): %s %s", PLANT[s].name(), m + 1,
                     batches[b].id, msg.errorCode(), msg.errorReason());
                 recordError(s, m, batches[b].id, msg.errorCode(), msg.errorReason());
@@ -418,6 +457,7 @@ public class Brewery {
     }
 
     static boolean allDone() {
+        if (started < n) return false;
         for (int b = 0; b < n; b++)
             if (!failed[b] && st[b][NUM_STEPS - 1] != StepState.DONE) return false;
         return true;
@@ -430,8 +470,8 @@ public class Brewery {
             System.err.println("batches must be 1.." + MAX_BATCHES);
             System.exit(1);
         }
-        if (TANK_STEP < 1 || TANK_STEP >= NUM_STEPS) {
-            System.err.println("TANK_STEP " + TANK_STEP + " is out of range");
+        if (NUM_STEPS != 6 || TANK_STEP != 4 || WHIRLPOOL_STEP != 3) {
+            System.err.println("the UPPAAL model has 6 steps (tank step 4)");
             System.exit(1);
         }
 
@@ -449,62 +489,14 @@ public class Brewery {
                 System.exit(1);
             }
 
-        batches = new Batch[n];
-        st = new StepState[n][NUM_STEPS];
-        failed = new boolean[n];
+        if (PLANT[TANK_STEP].count() < FREE_TANK_MIN) {
+            System.err.printf("plant has %d tanks, start_mashing needs free_tank >= %d%n",
+                    PLANT[TANK_STEP].count(), FREE_TANK_MIN);
+            System.exit(1);
+        }
+
         for (StepState[] row : st) Arrays.fill(row, StepState.PENDING);
-        for (int i = 0; i < n; i++) {
-            batches[i] = new Batch();
-            batches[i].id = i + 1;
-            batches[i].release = i * RELEASE_INTERVAL;
-        }
-        Arrays.sort(batches, Comparator.<Batch>comparingInt(x -> x.release).thenComparingInt(x -> x.id));
-
-        // ---- greedy planning ----
-        int[][] freeAt = new int[NUM_STEPS][MAX_MACHINES];
-        int prevInTank = 0;
-
-        for (int b = 0; b < n; b++) {
-            int ready = batches[b].release;
-            if (b > 0 && prevInTank > ready) ready = prevInTank;
-
-            int tank = 0;
-            for (int m = 1; m < PLANT[TANK_STEP].count(); m++)
-                if (freeAt[TANK_STEP][m] < freeAt[TANK_STEP][tank]) tank = m;
-            if (freeAt[TANK_STEP][tank] > ready) ready = freeAt[TANK_STEP][tank];
-
-            for (int s = 0; s < NUM_STEPS; s++) {
-                int bestM = 0, bestStart = -1;
-                if (s == TANK_STEP) {
-                    bestM = tank;
-                    bestStart = Math.max(freeAt[s][tank], ready);
-                } else {
-                    for (int m = 0; m < PLANT[s].count(); m++) {
-                        int start = Math.max(freeAt[s][m], ready);
-                        if (bestStart < 0 || start < bestStart) { bestStart = start; bestM = m; }
-                    }
-                }
-                int finish = bestStart + duration(s, bestM);
-                freeAt[s][bestM] = finish;
-                batches[b].start[s] = bestStart;
-                batches[b].machine[s] = bestM;
-                ready = finish;
-            }
-            batches[b].end = ready;
-            batches[b].tank = batches[b].machine[TANK_STEP];
-            prevInTank = batches[b].start[TANK_STEP];
-        }
-
-        System.out.println("Planned tank assignment (real tanks are picked at run time):");
-        for (Batch bt : batches)
-            System.out.printf("  batch %2d -> tank %d (planned entry h%d)%n",
-                    bt.id, bt.tank + 1, bt.start[TANK_STEP]);
-        System.out.println();
-
-        int plannedMakespan = Arrays.stream(batches).mapToInt(x -> x.end).max().orElse(0);
-
         for (int[] row : current) Arrays.fill(row, -1);
-        Arrays.fill(tankOwner, -1);
 
         // ---- Kafka ----
         Properties pp = new Properties();
@@ -526,15 +518,12 @@ public class Brewery {
 
         hbStart();
 
-        // warm-up: let the consumer join its group; current[][] is all -1,
-        // so onStatus ignores everything received here
         Instant warm = Instant.now();
         while (Duration.between(warm, Instant.now()).toSeconds() < WARMUP_S) {
             pollKafka(cons);
             hbPoll();
         }
 
-        // ---- run the schedule, driven by machine statuses ----
         t0 = Instant.now();
         boolean timedOut = false;
 
@@ -543,21 +532,18 @@ public class Brewery {
                 timedOut = true;
                 break;
             }
-            for (int b = 0; b < n; b++)
-                for (int s = 0; s < NUM_STEPS; s++)
-                    if (canStart(b, s)) sendStart(b, s);
-
+            fireEdges();
             pollKafka(cons);
             hbPoll();
         }
 
         int nfailed = 0;
-        for (boolean f : failed) if (f) nfailed++;
+        for (int b = 0; b < started; b++) if (failed[b]) nfailed++;
 
         if (timedOut)
             System.out.printf("%nTIMEOUT after %d s, some machines never finished%n", RUN_TIMEOUT_S);
-        System.out.printf("%nPlanned makespan: %d hours, actual: %d hours, failed batches: %d%n",
-                plannedMakespan, simHour(), nfailed);
+        System.out.printf("%nActual: %d hours, batches started: %d, failed batches: %d%n",
+                simHour(), started, nfailed);
 
         hbStop();
         cons.close();

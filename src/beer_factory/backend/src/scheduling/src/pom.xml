@@ -11,6 +11,7 @@
   <properties>
     <maven.compiler.release>17</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <exec.mainClass>GreedyScheduler</exec.mainClass>
   </properties>
 
   <dependencies>
@@ -42,14 +43,12 @@
   </dependencies>
 
   <build>
+    <sourceDirectory>${project.basedir}</sourceDirectory>
     <plugins>
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
         <version>3.3.0</version>
-        <configuration>
-          <mainClass>Brewery</mainClass>
-        </configuration>
       </plugin>
     </plugins>
   </build>
