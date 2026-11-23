@@ -82,10 +82,10 @@ public class GreedyScheduler {
     static final Step[] PLANT = {
         new Step("mashing",      1, 2, "mash_batch"),
         new Step("lautering",    1, 2, "sweet_wort_batch"),
-        new Step("boiling",      1, 2, "boiled_wort_batch"),
+        new Step("boiling",      1, 1, "boiled_wort_batch"),
         new Step("whirlpooling", 1, 1, "clarified_wort_batch"),
         new Step("fermentation_maturation", 5, 336, "green_beer_batch"),     // TANK_STEP
-        new Step("filtering",    1, 2, "filtered_beer_batch"),
+        new Step("filtering",    1, 4, "filtered_beer_batch"),
     };
     static final int NUM_STEPS = PLANT.length;
     static final int MAX_MACHINES = Arrays.stream(PLANT).mapToInt(Step::count).max().orElse(1);
@@ -227,7 +227,7 @@ public class GreedyScheduler {
             o.setKeepAliveInterval(60);
             o.setConnectionTimeout(3);
             o.setUserName(env("MQTT_USERNAME", "admin"));
-            o.setPassword(env("MQTT_PASSWORD", "").toCharArray());
+            o.setPassword(env("MQTT_PASSWORD", "admin123").toCharArray());
             hbClient.connect(o);
             hbClient.subscribe(HEARTBEAT_TOPIC, 0);
         } catch (Exception e) {

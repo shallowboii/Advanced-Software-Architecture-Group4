@@ -134,10 +134,59 @@ services:
 
   fermentation_maturation:
     <<: *machine
+    image: beer_factory-fermentation_maturation
     build:
       context: .
       dockerfile: fermentation_maturation/Dockerfile
       args: *time-args
+
+  tank1:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["1"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank2:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["2"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank3:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["3"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank4:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["4"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
 
   redis:
     image: redis:8.10.3

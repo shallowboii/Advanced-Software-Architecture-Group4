@@ -18,7 +18,8 @@ ARG TIME_DIVISOR=1
 COPY ${MACHINE}/ ${MACHINE}/
 WORKDIR /app/${MACHINE}
 
-RUN make test TIME_DIVISOR=1 \
+RUN echo "Building with TIME_DIVISOR=${TIME_DIVISOR}" \
+ && make test TIME_DIVISOR=1 \
  && make all MQTT_C_DIR=/mqtt-c TIME_DIVISOR=${TIME_DIVISOR} \
  && cp build/${BINARY} /machine
 
