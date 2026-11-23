@@ -1,3 +1,6 @@
+x-time-args: &time-args
+  TIME_DIVISOR: ${TIME_DIVISOR:-1}
+
 x-machine: &machine
   restart: unless-stopped
   init: true
@@ -64,7 +67,13 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "kafka:9093"]
+      test:
+        [
+          "CMD",
+          "/opt/kafka/bin/kafka-broker-api-versions.sh",
+          "--bootstrap-server",
+          "kafka:9093",
+        ]
       interval: 10s
       timeout: 10s
       retries: 12
@@ -93,36 +102,42 @@ services:
     build:
       context: .
       dockerfile: mashing/Dockerfile
+      args: *time-args
 
   lautering:
     <<: *machine
     build:
       context: .
       dockerfile: lautering/Dockerfile
+      args: *time-args
 
   boiling:
     <<: *machine
     build:
       context: .
       dockerfile: boiling/Dockerfile
+      args: *time-args
 
   whirlpooling:
     <<: *machine
     build:
       context: .
       dockerfile: whirlpooling/Dockerfile
+      args: *time-args
 
   filtering:
     <<: *machine
     build:
       context: .
       dockerfile: filtering/Dockerfile
+      args: *time-args
 
   fermentation_maturation:
     <<: *machine
     build:
       context: .
       dockerfile: fermentation_maturation/Dockerfile
+      args: *time-args
 
   redis:
     image: redis:8.10.3

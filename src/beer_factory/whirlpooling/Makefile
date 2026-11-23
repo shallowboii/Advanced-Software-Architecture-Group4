@@ -8,6 +8,9 @@ CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -Werror -O2
 LDFLAGS ?=
 LDLIBS ?=
 
+TIME_DIVISOR ?= 1
+CPPFLAGS += -DTIME_DIVISOR=$(TIME_DIVISOR)
+
 CORE := src/whirlpooling.c src/whirlpooling.h
 
 # ---- Controller (Kafka + MQTT heartbeat) -----------------------------------

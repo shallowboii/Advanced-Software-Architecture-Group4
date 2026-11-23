@@ -15,6 +15,9 @@ MQTT_COMMONS ?= ../machine_commons/machine_mqtt
 MQTT_C_DIR ?=
 MQTT_LIBS ?= -lmqttc
 
+TIME_DIVISOR ?= 1
+CPPFLAGS += -DTIME_DIVISOR=$(TIME_DIVISOR)
+
 CORE := src/lautering.c src/lautering.h
 
 .PHONY: all test clean

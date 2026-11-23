@@ -1,8 +1,10 @@
 GreedyScheduler$1.class
 StarScheduler$Status.class
+Wire$Msg.class
 GreedyScheduler$HbEntry.class
 StarScheduler$Batch.class
 StarScheduler$Step.class
+Wire.class
 GreedyScheduler$Step.class
 StarScheduler$HbEntry.class
 MockMachines.class

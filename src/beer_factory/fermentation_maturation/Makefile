@@ -11,6 +11,9 @@ MQTT_COMMONS ?= ../machine_commons/machine_mqtt
 MQTT_C_DIR ?=
 MQTT_LIBS ?= -lmqttc
 
+TIME_DIVISOR ?= 1
+CPPFLAGS += -DTIME_DIVISOR=$(TIME_DIVISOR)
+
 .PHONY: all test test-reuse mqtt clean
 
 all: build/tank-mqtt

@@ -3,7 +3,11 @@
 #include <stdint.h>
 
 /* T_MASHING is two hours in Beer_Factory.xml. */
-#define MASHING_DURATION_SECONDS 7200
+#ifndef TIME_DIVISOR
+#define TIME_DIVISOR 1
+#endif
+
+#define MASHING_DURATION_SECONDS (7200 / TIME_DIVISOR)
 
 typedef enum { MASHING_WAIT, MASHING_MASH } mashing_state_t;
 

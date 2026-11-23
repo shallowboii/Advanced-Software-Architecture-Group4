@@ -12,6 +12,9 @@ MQTT_C_DIR ?=
 MQTT_LIBS ?= -lmqttc
 PYTHON ?= python3
 
+TIME_DIVISOR ?= 1
+CPPFLAGS += -DTIME_DIVISOR=$(TIME_DIVISOR)
+
 .PHONY: all test test-controller mqtt test-mqtt clean
 
 all: build/boiling-mqtt

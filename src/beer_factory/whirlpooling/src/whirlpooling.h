@@ -17,7 +17,11 @@
 
 /* T_WHIRLPOOLING = 1 h (FR-10.4); a start can set another run time
  * (whirlpooling_set_duration). */
-#define WHIRLPOOLING_DURATION_SECONDS 3600
+#ifndef TIME_DIVISOR
+#define TIME_DIVISOR 1
+#endif
+
+#define WHIRLPOOLING_DURATION_SECONDS (3600 / TIME_DIVISOR)
 
 /*
  * STOPPED is not in the UPPAAL model: it is the stop command (FR-13). The

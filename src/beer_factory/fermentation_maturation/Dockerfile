@@ -14,12 +14,13 @@ WORKDIR /app
 COPY machine_commons/ machine_commons/
 ARG MACHINE
 ARG BINARY
+ARG TIME_DIVISOR=1
 COPY ${MACHINE}/ ${MACHINE}/
 WORKDIR /app/${MACHINE}
 
 # The legacy tank tests use an older API; run the current reuse regression.
-RUN make test-reuse \
- && make all MQTT_C_DIR=/mqtt-c \
+RUN make test-reuse TIME_DIVISOR=1 \
+ && make all MQTT_C_DIR=/mqtt-c TIME_DIVISOR=${TIME_DIVISOR} \
  && cp build/${BINARY} /machine
 
 FROM debian:bookworm-slim

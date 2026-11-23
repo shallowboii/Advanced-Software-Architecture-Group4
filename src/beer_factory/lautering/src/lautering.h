@@ -2,7 +2,11 @@
 
 #include <stdint.h>
 
-#define LAUTERING_DURATION_SECONDS 7200
+#ifndef TIME_DIVISOR
+#define TIME_DIVISOR 1
+#endif
+
+#define LAUTERING_DURATION_SECONDS (7200 / TIME_DIVISOR)
 
 typedef enum { LAUTERING_WAIT, LAUTERING_LAUTER } lautering_state_t;
 

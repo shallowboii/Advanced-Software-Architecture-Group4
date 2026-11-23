@@ -74,6 +74,8 @@ public class StarScheduler {
 
     static KafkaProducer<String, byte[]> producer;
 
+    static final int ID_BASE = Integer.parseInt(env("MACHINE_ID_BASE", "0"));
+
     // ---- plant definition  ----
     record Step(String name, int count, int durationHours, String output) {}
 
@@ -326,11 +328,11 @@ public class StarScheduler {
             "batch" + batches[b].id + "-step" + (s + 1) + "-start",
             "duration_s", durationS(s, m));
         producer.send(new ProducerRecord<>(topic(s),
-            String.valueOf(m + 1), payload));
+            String.valueOf(m + ID_BASE), payload));
 
         st[b][s] = StepState.SENT;
         current[s][m] = b;
-        log("%-16s machine %d START sent (batch %d)", PLANT[s].name(), m + 1, batches[b].id);
+        log("%-16s machine %d START sent (batch %d)", PLANT[s].name(), m + ID_BASE, batches[b].id);
     }
 
     static void edgeStartMashing() {
@@ -398,7 +400,7 @@ public class StarScheduler {
         if (!t.equals("IDLE") && !t.equals("RUNNING") && !t.equals("ERROR")) return;
 
         int s = stepOf(msg.machineType());
-        int m = msg.machineId() - 1;
+        int m = msg.machineId() - ID_BASE;
         if (s < 0 || m < 0 || m >= PLANT[s].count()) return;
 
         int b = current[s][m];
