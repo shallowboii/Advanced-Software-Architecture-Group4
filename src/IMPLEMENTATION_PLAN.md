@@ -4,6 +4,19 @@ Written 19 November 2026 against commit `5778335` and the UPPAAL model
 `src/docs/Beer_Factory.xml`. Supersedes the plan of 27 October (Java/Go/Postgres
 stack); what the group actually built since then is C machines, a C scheduler
 sketch, MQTT heartbeats and Kubernetes manifests, so the plan starts from that.
+Revised 23 November 2026 (communication split, status of this document).
+
+**Status of this document: fallback, not the work plan.** The group implements
+the project by hand, each member in their own area, deciding details as they
+go. This plan is only followed if we end up finishing the remaining parts with
+AI assistance; in that case it is the specification the AI works from. Until
+then it is a reference for the agreed architecture (sections 3 and 6.1–6.3),
+and where hand-written code and this plan differ, the code wins and the plan
+is updated.
+
+**Communication in one line:** scheduler ↔ machine goes over **Kafka**
+(commands and events, nothing else); liveness and sensor readings go over the
+**MQTT heartbeat** (one message carries both).
 
 Goal: a running prototype of the production line **and** an experiment that
 compares several scheduler versions on factory efficiency. Report deadline:
@@ -34,7 +47,7 @@ three rules and no speculative features.
 | `src/docs/Beer_Factory.xml` | all | compiles; Scheduler hub has a known deadlock (mash #2 and lauter #1 finish in the same hour, committed `Lauter` location blocks) | fix with a busy flag per stage (`is_lautering` like `is_mashing`); this is the reference for `StarScheduler` |
 | `beer_factory/boiling`, `whirlpooling`, `lautering` (PR #14), `fermentation_maturation` | Nicola, Márton, Jędrzej, Nicola | state machines in seconds, result codes, tests; `main.c` runs one hard-coded batch and sends heartbeats | keep the state machines unchanged; replace `main.c` loop by the common machine loop of section 6.2 |
 | `beer_factory/mashing`, `filtering` | Katrín, Vera | `mashing` is a heartbeat stub; `filtering.c` implements Vera's C `MachineType` interface | write `mashing.c/.h` boiling-style; rewrite `filtering.c` boiling-style (4 h, one output counter); same common loop |
-| `beer_factory/machine_commons/machine_mqtt` | Nicola | MQTT-C heartbeat library, 5 s interval, payload = two `int`s (timestamp, machine index), broker hard-coded `localhost:1883` | keep; read broker host/port from env (`MQTT_HOST`, `MQTT_PORT`) so it works in Compose |
+| `beer_factory/machine_commons/machine_mqtt` | Nicola | MQTT-C heartbeat library, 5 s interval, payload = two `int`s (timestamp, machine index), broker hard-coded `localhost:1883` | keep; read broker host/port from env (`MQTT_HOST`, `MQTT_PORT`) so it works in Compose; extend the payload with machine state and sensor readings (section 6.3) |
 | `beer_factory/machine_commons/machine_kafka` | Nicola | empty | librdkafka wrapper: `commands.c/.h` (section 6.1) |
 | `beer_factory/backend/src/scheduling` (C) | Vera | `MachineType` tick interface, `greedy_scheduler.c` plans offline then replays the plan hour by hour and writes to Redis; `star_scheduler.c` is an empty shell; `test_plant.c` stubs | the algorithm is ported 1:1 to Java as `GreedyScheduler` (section 4); the C harness stays in git as the origin of the port but is not built or deployed |
 | `beer_factory/backend/src/redis_conn.*` | Vera | hiredis connection from env | key names reused by the Java backend (section 6.4) |
@@ -52,7 +65,7 @@ flowchart LR
     M[mashing-0] --- L[lautering-0] --- B[boiling-0] --- W[whirlpooling-0] --- T[tank-0..N] --- F[filtering-0]
   end
   K[(Kafka<br/>factory.commands / factory.events)]
-  Q[(RabbitMQ MQTT<br/>heartbeat topics)]
+  Q[(RabbitMQ MQTT<br/>heartbeat topics:<br/>liveness + sensors)]
   subgraph backend["Java backend"]
     S[Scheduler core<br/>Star / Greedy / ...]
     LD[Live driver]
@@ -66,7 +79,7 @@ flowchart LR
   machines -- events --> K -- commands --> machines
   K <--> LD <--> S
   SD <--> S
-  machines -- heartbeats --> Q --> HM
+  machines -- heartbeats with sensor readings --> Q --> HM
   LD --> PG & RD
   LD -- reserve --> INV --> PG
   HM & LD --> API
@@ -74,20 +87,28 @@ flowchart LR
 
 | Component | Language | Where | Talks to | Covers |
 | --- | --- | --- | --- | --- |
-| Machine (6 types, N tanks) | C | `beer_factory/<stage>/` | Kafka in/out, MQTT out, local stop input | FR-3, FR-4 (duration only), FR-8, FR-10, NF-1, NF-2 |
+| Machine (6 types, N tanks) | C | `beer_factory/<stage>/` | Kafka in/out (scheduler), MQTT out (heartbeat + sensors), local stop input | FR-3, FR-4 (duration only), FR-6, FR-8, FR-10, NF-1, NF-2 |
 | Scheduler core | Java 21 | `beer_factory/backend/` (Maven) | nothing external | FR-3, NF-8; the experiment subject |
 | Simulation driver | Java | same jar, `simulate` command | CSV out | experiment |
 | Live driver | Java | same jar, `serve` command | Kafka, Postgres, Redis, inventory | FR-3, FR-9 |
-| Heartbeat monitor | Java | same jar | RabbitMQ MQTT | FR-5, NF-3 |
-| REST + dashboard | Java + one static HTML page | same jar | browser | FR-5, FR-6 (status only), NF-4 |
+| Heartbeat monitor | Java | same jar | RabbitMQ MQTT | FR-5, FR-6, NF-3 |
+| REST + dashboard | Java + one static HTML page | same jar | browser | FR-5, FR-6, NF-4 |
 | Inventory | Python | `beer_factory/inventory/` | HTTP/JSON from the live driver, Postgres | FR-7 (stock), course requirement "point-to-point across languages" |
 | Experiment runner and analysis | Python | `src/experiment/` | runs the jar | course requirement S7, report section Evaluation |
 
-Two buses on purpose: MQTT for the frequent small heartbeats (already working),
-Kafka for commands and events because they must be durable and replayable
-(the batch record FR-9 is rebuilt from the event log). Two databases on
-purpose: Postgres for records that outlive a run, Redis for "what is running
-now", as the report argues.
+Two buses on purpose, with a strict split:
+
+- **Kafka = scheduler ↔ machine.** Commands (`start`, `stop`, `resume`) and the
+  events that answer them (`started`, `done`, `stopped`, `resumed`). They must
+  be durable and replayable (the batch record FR-9 is rebuilt from the event
+  log). The scheduler decides from these events only.
+- **MQTT heartbeat = monitoring.** Every 5 s each machine publishes one
+  heartbeat that says "I am alive", its current state and its sensor readings.
+  Frequent, small, and losing one does not matter. Nothing on this bus drives
+  the scheduler; no heartbeat or sensor data goes to Kafka.
+
+Two databases on purpose: Postgres for records that outlive a run, Redis for
+"what is running now", as the report argues.
 
 ## 4 Scheduler core (Java)
 
@@ -187,7 +208,9 @@ Two topics, JSON, key = machine id (`<stage>-<index>`, e.g. `lautering-0`,
 C side: `machine_commons/machine_kafka/commands.c/.h` on librdkafka
 (`apt-get install librdkafka-dev` in the gcc image, `-lrdkafka`):
 `kafka_init(machine_id)`, `kafka_poll_command(&cmd)` (non-blocking),
-`kafka_send_event(type, batch)`. Java side: `kafka-clients`. Broker: Apache
+`kafka_send_event(type, batch)`. Java side: `kafka-clients`. These two topics
+are the whole scheduler–machine interface; heartbeats and sensor readings are
+not on Kafka (section 6.3). Broker: Apache
 Kafka single node (KRaft) in Compose.
 
 ### 6.2 Common machine loop (every `<stage>/src/main.c`)
@@ -201,7 +224,8 @@ for (;;) {
     if (cmd.type == RESUME) stopped = false;
   }
   if (!stopped && x_update(&m, sim_now) == X_DONE) kafka_send_event("done", batch);
-  heartbeat_update(topic, real_now, stopped ? "stopped" : state_name);
+  x_read_sensors(&m, sim_now, &sensors);                    // simulated from the state
+  heartbeat_update(topic, real_now, stopped ? STOPPED : m.state, batch, &sensors);
   sleep(1);
 }
 ```
@@ -221,11 +245,32 @@ for (;;) {
 
 ### 6.3 Monitoring (FR-5, NF-3)
 
+The heartbeat is the only monitoring channel: liveness and sensor readings
+travel in the same message. Nicola's payload (two little-endian `int32`s:
+timestamp, machine index) grows by appended fields, so existing readers of the
+first two fields keep working:
+
+```c
+typedef struct {
+  int32_t timestamp;      // unchanged
+  int32_t machine_idx;    // unchanged
+  int32_t state;          // enum from the machine's state machine, or STOPPED
+  int32_t batch;          // -1 when idle
+  int32_t temperature_dc; // tenths of a degree C
+  int32_t level_pct;      // fill level, 0-100
+} machine_heartbeat_t;
+```
+
+Sensor values are simulated: `x_read_sensors` derives them from the state and
+the time in it (e.g. boiling ramps to 100 °C and holds), since there is no
+hardware and the UPPAAL model has no sensors. Which two readings each machine
+reports is open decision 4.
+
 Java `HeartbeatMonitor` subscribes to the heartbeat topics on RabbitMQ (MQTT
-plugin) with Paho, parses Nicola's payload (two little-endian `int32`s), and
+plugin) with Paho, parses the struct, keeps the latest values per machine and
 marks a machine `down` after 15 s without a heartbeat (three missed 5 s
-beats). `GET /api/machines` returns `{id, status, lastSeen, batch}` for the
-dashboard. Heartbeat tests already exist in `boiling/tests/test_mqtt.py`; the
+beats). `GET /api/machines` returns `{id, status, lastSeen, batch, sensors}`
+for the dashboard. Heartbeat tests already exist in `boiling/tests/test_mqtt.py`; the
 Java side gets a unit test with a fake clock.
 
 ### 6.4 Storage
@@ -243,8 +288,9 @@ Java side gets a unit test with a fake clock.
 
 One static HTML page served by the backend, polling `/api/machines`,
 `/api/tanks`, `/api/batches` once per second (FR-5 asks for 1 Hz). No build
-chain. Sensor values (FR-6.1/6.2) are out of the prototype: the model has no
-sensors; the page shows the machine state and the batch instead.
+chain. Per machine the page shows state, batch and the sensor values
+(FR-6.1/6.2) from the latest heartbeat, so sensor values refresh every 5 s
+(the heartbeat interval), not every second.
 
 ### 6.6 Inventory (FR-7)
 
@@ -278,20 +324,24 @@ Trucks and the ordering department stay out (group decision).
 | NF-5 no software stop | whole NTA | | | `A[] not deadlock` (small plant) | 10 consecutive batches in the live demo |
 | NF-8 95 % tank usage | `free_tank`, `almost_done`, `TIME_LEFT_LIMIT` | | `StarScheduler` guard | | tank utilisation, 720 h |
 | FR-5, NF-3 machine down in 15 s | | heartbeat 5 s | `HeartbeatMonitor` | | kill a container, watch the dashboard |
+| FR-6 sensor values | | `x_read_sensors`, heartbeat payload | `HeartbeatMonitor` | | dashboard shows values changing during a batch |
 | FR-8, NF-1 stop in 1 s without bus | `Stopped` location (to add) | `SIGUSR1` handler | STOP command | `E<> Lautering.Stopped` | time from signal to `stopped` heartbeat |
 | FR-9 batch record | | | Postgres `steps` | | row count per batch |
 | FR-7 stock | | | inventory call | | 409 blocks admission |
 
 ## 9 Order of work and suggested owners
 
-Owners follow who built the area so far; swap as you like.
+Only relevant in the AI-assisted fallback (see the status note at the top):
+while the group works by hand, everyone plans their own area and these dates
+are not commitments. If we switch, this is the order in which the remaining
+parts are generated and reviewed; owners follow who built the area so far.
 
 | When | What | Owner |
 | --- | --- | --- |
 | by 26 Nov | Java backend skeleton (Maven, plain Java 21), `Scheduler` interface, simulation driver, `StarScheduler`, CSV + metrics; model deadlock fix (`is_lautering`) | Jędrzej (sim, model), Vera (interface review) |
 | by 26 Nov | `machine_kafka` wrapper + common loop in one machine (lautering) + Kafka in Compose, end to end with the live driver | Nicola (Kafka), Jędrzej (lautering) |
 | by 3 Dec | `GreedyScheduler` port + unit tests; `mashing.c`, boiling-style `filtering.c`; common loop in all machines; `TIME_SCALE`; local stop | Vera (greedy, filtering), Katrín (mashing), Márton (whirlpooling, boiling loop), Nicola (tank) |
-| by 3 Dec | heartbeat monitor + `/api/machines`; Postgres/Redis writes; pilot experiment (5 seeds × cells) | Nicola (monitor), Vera (storage), Jędrzej (pilot) |
+| by 3 Dec | heartbeat payload with state + sensors; heartbeat monitor + `/api/machines`; Postgres/Redis writes; pilot experiment (5 seeds × cells) | Nicola (monitor), Vera (storage), Jędrzej (pilot) |
 | by 10 Dec | dashboard page; inventory service; full experiment runs and figures; CI images; Kubernetes applied once | Katrín (dashboard, inventory), Márton (CI, k8s), Jędrzej (experiment) |
 | 12 Dec | code freeze; UPPAAL queries per requirement row rerun on the final model; report | all |
 
@@ -304,8 +354,10 @@ Owners follow who built the area so far; swap as you like.
    replications and report the deterministic numbers only.
 3. **MQTT broker**: RabbitMQ with the MQTT plugin (report) rather than
    Mosquitto; the C heartbeat code works with either.
-4. **Heartbeat payload** stays the raw two-int struct; JSON would be easier
-   for Java but changes Nicola's tests.
+4. **Heartbeat payload** stays a raw struct, extended with state, batch and
+   two sensor readings (section 6.3); JSON would be easier for Java but
+   changes Nicola's tests. Open: which readings per machine (default:
+   temperature and fill level everywhere).
 5. **Plain Java 21 + four libraries** (kafka-clients, Paho, pgjdbc, Jedis,
    `com.sun.net.httpserver`) rather than Spring Boot: less to explain at the
    exam. Spring is fine if the backend owner prefers it.
