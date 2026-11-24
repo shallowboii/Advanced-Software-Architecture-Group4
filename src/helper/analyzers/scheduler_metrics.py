@@ -1,5 +1,6 @@
 """
-Scheduler metrics, calculated from the scheduler log in "Batches .docx".
+Scheduler metrics, calculated from the scheduler log: the console output of
+the scheduler runs, saved as a .docx (like "Batches .docx") or as plain text.
 
 For every run (e.g. Greedy with 24 batches) it calculates:
   - throughput           batches finished per day
@@ -10,6 +11,7 @@ The formulas are explained in README.md.
 
 Run (from the repository root):
     python src/helper/analyzers/scheduler_metrics.py
+    python src/helper/analyzers/scheduler_metrics.py runs.txt
     python src/helper/analyzers/scheduler_metrics.py other.docx --out somewhere/
 
 Writes three CSV files and, if matplotlib is installed, four charts into the
@@ -83,6 +85,22 @@ def read_docx_lines(path):
         document = ElementTree.fromstring(docx.read("word/document.xml"))
     return ["".join(piece.text or "" for piece in paragraph.iter(word + "t")).strip()
             for paragraph in document.iter(word + "p")]
+
+
+def read_text_lines(path):
+    """Return every line of a plain text file (e.g. console output saved as .txt).
+
+    Characters that aren't valid UTF-8 are replaced instead of stopping the
+    script; the lines we use are plain ASCII anyway."""
+    with open(path, encoding="utf-8-sig", errors="replace") as file:
+        return [line.strip() for line in file]
+
+
+def read_lines(path):
+    """.docx files are read as Word documents, every other file as plain text."""
+    if path.suffix.lower() == ".docx":
+        return read_docx_lines(path)
+    return read_text_lines(path)
 
 
 def parse_runs(lines):
@@ -455,18 +473,23 @@ def draw_charts(runs, metrics, folder):
 
 def main():
     parser = argparse.ArgumentParser(description="Scheduler metrics from the scheduler log.")
-    parser.add_argument("docx", nargs="?", type=Path, default=DEFAULT_DOCX,
-                        help=f"the log as .docx (default: {DEFAULT_DOCX})")
+    parser.add_argument("log", nargs="?", type=Path, default=DEFAULT_DOCX,
+                        help=f"the log as .docx or as a text file, e.g. runs.txt "
+                             f"(default: {DEFAULT_DOCX})")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT,
                         help=f"folder for the CSV files and charts (default: {DEFAULT_OUT})")
     args = parser.parse_args()
 
-    # 1. Read the log
-    if not args.docx.is_file():
-        sys.exit(f"error: {args.docx} not found")
-    runs = parse_runs(read_docx_lines(args.docx))
+    # 1. Read the log (.docx or plain text)
+    if not args.log.is_file():
+        sys.exit(f"error: {args.log} not found")
+    try:
+        lines = read_lines(args.log)
+    except (zipfile.BadZipFile, KeyError):
+        sys.exit(f"error: {args.log} is not a valid .docx file")
+    runs = parse_runs(lines)
     if not runs:
-        sys.exit(f"error: no '<N> batches' runs found in {args.docx}")
+        sys.exit(f"error: no '<N> batches' runs found in {args.log}")
 
     # 2. Check it and calculate everything once
     metrics = {}

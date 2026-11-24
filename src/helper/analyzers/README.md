@@ -4,7 +4,7 @@ Python scripts that analyze the data from the scheduler experiments.
 
 ## scheduler_metrics.py
 
-Compares the schedulers using the scheduler console output that was pasted into [`src/docs/Batches .docx`](../../docs/). The file name has a space before `.docx`. For every run (Greedy and Star, 24 / 50 / 100 batches) it calculates:
+Compares the schedulers using the scheduler console output. The output can be pasted into a Word document, like [`src/docs/Batches .docx`](../../docs/) (the file name has a space before `.docx`), or simply saved as a text file. For every run (Greedy and Star, 24 / 50 / 100 batches) it calculates:
 
 | Metric | Question it answers |
 | --- | --- |
@@ -24,12 +24,54 @@ py -3.12 src/helper/analyzers/scheduler_metrics.py
 
 Without matplotlib (`python src/helper/analyzers/scheduler_metrics.py`) it still prints the tables and writes the CSV files; it only skips the charts.
 
-Options:
+With no file given, it reads `src/docs/Batches .docx`. To analyze another log, pass it as the first argument:
 
 ```bash
-py -3.12 src/helper/analyzers/scheduler_metrics.py other_log.docx   # another input file
-py -3.12 src/helper/analyzers/scheduler_metrics.py --out somewhere/ # another output folder
+py -3.12 src/helper/analyzers/scheduler_metrics.py runs.txt             # a text file
+py -3.12 src/helper/analyzers/scheduler_metrics.py other_log.docx       # another Word document
+py -3.12 src/helper/analyzers/scheduler_metrics.py runs.txt --out out/  # another output folder
 ```
+
+### Using a text file instead of Word
+
+A `.docx` file is read as a Word document. Any other file (`.txt`, `.log`, ...) is read as plain text, one line per log line. Both give exactly the same results.
+
+The easiest way to get a text file is to save the scheduler output directly while it runs. Write the scheduler name and the number of batches on top, so the script knows which run it is:
+
+```bash
+echo "Greedy"     >  runs.txt
+echo "24 batches" >> runs.txt
+mvn -q compile exec:java -Dexec.args="24" >> runs.txt 2>&1
+
+echo "Star"       >> runs.txt
+echo "24 batches" >> runs.txt
+mvn -q compile exec:java -Dexec.mainClass=StarScheduler -Dexec.args="24" >> runs.txt 2>&1
+```
+
+You can also copy the console output into Notepad and save it as `runs.txt`. A text file looks like this:
+
+```text
+Greedy
+24 batches
+h   0: mashing          machine 1 START sent (batch 1)
+h   1: mashing          machine 1 running (batch 1)
+h   2: mashing          machine 1 done (batch 1)
+...
+Planned makespan: 484 hours, actual: 529 hours, failed batches: 0
+50 batches
+...
+Star
+24 batches
+...
+Actual: 492 hours, batches started: 24, failed batches: 0
+```
+
+One file can hold any number of runs. Extra lines (warnings, `export`, `mvn`, the tank plan) can stay in; they are skipped. Each run needs:
+- its `Greedy` / `Star` line (once, before the scheduler's first run),
+- its `N batches` line,
+- its summary line with `actual: N hours`, or the throughput and utilization can't be calculated.
+
+The encoding doesn't matter: characters that aren't UTF-8 (e.g. Polish letters saved by Notepad in an older encoding) are replaced and don't stop the script.
 
 ## How the values are calculated
 
@@ -99,7 +141,7 @@ The console also prints three tables:
 
 ## Input format
 
-Every paragraph of the docx is read as one line. Only these lines are used:
+Every paragraph of a `.docx`, or every line of a text file, is read as one line. Only these lines are used:
 
 | Line | Meaning |
 | --- | --- |
