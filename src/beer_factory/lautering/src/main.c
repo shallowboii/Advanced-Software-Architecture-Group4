@@ -1,10 +1,48 @@
 #include "heartbeat.h"
 #include "lautering.h"
+#include "machine_kafka.h"
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <unistd.h>
+
+#define MACHINE_TYPE "lautering"
+#define TOPIC "asaat67.machine." MACHINE_TYPE
+
+typedef struct {
+  int id;
+  rd_kafka_t *producer;
+  lautering_t lautering;
+  lautering_batches_t batches;
+  char batch_id[KAFKA_BATCH_LEN];
+  uint64_t now;
+} controller_t;
+
+static void send_status(controller_t *c, kafka_type_t type) {
+  kafka_message_t status = {0};
+  status.type = type;
+  snprintf(status.machine_type, sizeof(status.machine_type), "%s", MACHINE_TYPE);
+  status.machine_id = c->id;
+  memcpy(status.batch_id, c->batch_id, sizeof(status.batch_id));
+  kafka_send(c->producer, TOPIC, &status);
+}
+
+static void on_message(const kafka_message_t *msg, void *context) {
+  controller_t *c = context;
+  if (msg->machine_id != c->id || msg->type != KAFKA_START ||
+      c->lautering.state != LAUTERING_WAIT)
+    return;
+
+  c->batches.wort_batches = 1;
+  if (lautering_start(&c->lautering, c->now) != LAUTERING_STARTED)
+    return;
+  memcpy(c->batch_id, msg->batch_id, sizeof(c->batch_id));
+  printf("Lautering started\n");
+  send_status(c, KAFKA_RUNNING);
+  /* STOP / FLUSH and start parameters are not handled, as in whirlpooling. */
+}
 
 int main(int argc, char **argv) {
   if (argc != 2) {
@@ -18,6 +56,10 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
 
+  const char *brokers = getenv("KAFKA_BROKERS");
+  if (brokers == NULL || brokers[0] == '\0')
+    brokers = "localhost:9092";
+
   enum MQTTErrors *mqtt_result = heartbeat_init("LAUTERING", machine_number);
   if (*mqtt_result != MQTT_OK) {
     printf("Could not start MQTT!\n");
@@ -29,12 +71,12 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
 
-  /* Run one normal, two-hour batch; keep reporting while waiting afterward. */
-  lautering_batches_t batches = {.wort_batches = 1, .sweet_wort_batches = 0};
-  lautering_t lautering;
-  lautering_init(&lautering, &batches);
-  lautering_start(&lautering, started.tv_sec);
-  printf("Lautering started\n");
+  controller_t c = {.id = (int)machine_number};
+  lautering_init(&c.lautering, &c.batches);
+  char group_id[48];
+  snprintf(group_id, sizeof(group_id), "%s-%d", MACHINE_TYPE, c.id);
+  c.producer = kafka_producer_new(brokers);
+  rd_kafka_t *consumer = kafka_consumer_new(brokers, group_id, TOPIC);
 
   int status = EXIT_SUCCESS;
   while (1) {
@@ -45,9 +87,15 @@ int main(int argc, char **argv) {
       break;
     }
 
-    if (lautering.state == LAUTERING_LAUTER &&
-        lautering_update(&lautering, now.tv_sec) == LAUTERING_DONE) {
+    c.now = now.tv_sec;
+    kafka_poll(consumer, on_message, &c);
+    rd_kafka_poll(c.producer, 0);
+
+    if (c.lautering.state == LAUTERING_LAUTER &&
+        lautering_update(&c.lautering, c.now) == LAUTERING_DONE) {
       printf("Lautering complete; waiting.\n");
+      c.batches.sweet_wort_batches = 0; /* pumped to the next machine */
+      send_status(&c, KAFKA_IDLE);
     }
 
     heartbeat_update("lautering", now.tv_sec);
@@ -55,5 +103,7 @@ int main(int argc, char **argv) {
   }
 
   heartbeat_destroy();
+  kafka_consumer_close(consumer);
+  kafka_producer_close(c.producer);
   return status;
 }

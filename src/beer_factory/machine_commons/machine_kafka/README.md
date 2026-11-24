@@ -2,11 +2,11 @@
 
 A thin C wrapper around [librdkafka](https://github.com/confluentinc/librdkafka). The scheduler uses it to send commands to the machines, and the machines use it to send their status back. It is two files: `machine_kafka.h` and `machine_kafka.c`.
 
-The library only covers the happy path for now. Places that still need work are marked `TODO` in the code.
+Receive errors, invalid payload sizes and immediate send failures are reported to stderr and returned to the caller. Places that still need work are marked `TODO` in the code.
 
 ## How it works
 
-- **One topic per machine type**, e.g. `machine.whirlpooling`. Commands and statuses go on the same topic. The library does not create topics.
+- **One topic per machine type**, e.g. `asaat67.machine.whirlpooling`. Commands and statuses go on the same topic. The library does not create topics.
 - **The key is the machine id**, so all messages for one machine land on the same partition and stay in order.
 - **Everyone reads their own messages back.** Skip them by type: a machine handles only commands with its own id, and the scheduler handles only statuses. The library doesn't filter; your handler does.
 - **Producer:** `enable.idempotence=true` (retries can't duplicate or reorder) and `linger.ms=0` (no batching). Nothing else is configured.
@@ -23,24 +23,23 @@ The library only covers the happy path for now. Places that still need work are 
 | Function | What it does |
 | --- | --- |
 | `kafka_producer_new(brokers)` | creates a producer |
-| `kafka_send(producer, topic, &msg)` | queues `msg` on `topic` with key `msg.machine_id` |
+| `kafka_send(producer, topic, &msg)` | queues `msg` on `topic` with key `msg.machine_id`; returns 0 if queued, -1 on failure |
 | `kafka_producer_close(producer)` | waits up to 10 s for outstanding messages, then frees the producer |
 | `kafka_consumer_new(brokers, group_id, topic)` | creates a consumer subscribed to one topic |
-| `kafka_poll(consumer, handler, context)` | waits up to 100 ms for one message, calls `handler(&msg, context)`, then commits. Kafka errors and messages of the wrong size are printed and skipped. Returns 1 if it handled a message, 0 if not |
+| `kafka_poll(consumer, handler, context)` | waits up to 100 ms for one message, calls `handler(&msg, context)`, then commits. Returns 1 if handled, 0 if none came, -1 on a receive error or invalid payload |
 | `kafka_consumer_close(consumer)` | leaves the group and frees the consumer |
 
 `handler` is your function of type `kafka_message_handler`: `void handler(const kafka_message_t *msg, void *context)`. `context` is passed through to it unchanged. Use it to reach your own state without globals.
 
 If a sent message can't be delivered, `on_delivery_report` in `machine_kafka.c` prints it to stderr. It only runs during `kafka_send`, `kafka_producer_close` or `rd_kafka_poll(producer, 0)`, so call the last one in your loop.
 
+Receive errors and invalid payloads are freed without invoking the handler or committing their offsets. Successful send queueing does not guarantee delivery: asynchronous delivery failures are printed by the delivery callback.
+
 Every participant needs one producer and one consumer, because a librdkafka handle is either one or the other. Each machine instance needs its **own** `group_id` (e.g. `whirlpooling-1`) so that it reads the whole topic. If instances shared a group, Kafka would split the partitions between them, and a machine could miss its own commands.
 
-## Known limitations
-
-- **Create the topic before starting a consumer.** If it doesn't exist yet, `kafka_poll` prints `Kafka: Subscribed topic not available: ...` and keeps waiting. It picks the topic up once it's created, but messages sent before that are missed.
-- **Messages of the wrong size are skipped.** `kafka_poll` prints `Kafka: skipped a message of N bytes` and commits it, so it isn't read again.
-- **Send only messages built with `kafka_message_t`.** A message of the right size whose text fields have no closing `'\0'` still reaches the handler, and printing such a field reads past its end. Don't use "Produce Message" in a Kafka UI on these topics.
-- **Failures aren't reported to the caller.** `kafka_send` always returns 0, and the create functions don't check their settings.
+Machine controllers default to `localhost:9092`, matching the published listener
+in `../../docker-compose.yml`. Set `KAFKA_BROKERS=kafka:9093` for machines running
+on the Compose `messaging` network, or override it with another broker address.
 
 ## Usage
 
@@ -64,7 +63,7 @@ static void on_message(const kafka_message_t *msg, void *context) {
 }
 
 c.producer = kafka_producer_new(brokers);
-c.consumer = kafka_consumer_new(brokers, "whirlpooling-1", "machine.whirlpooling");
+c.consumer = kafka_consumer_new(brokers, "whirlpooling-1", "asaat67.machine.whirlpooling");
 while (!stopping) {
   kafka_poll(c.consumer, on_message, &c);   /* also the loop's 100 ms sleep */
   rd_kafka_poll(c.producer, 0);             /* serve delivery reports */
@@ -85,7 +84,7 @@ This is a complete program. It sends one start to whirlpooling 1 and prints the 
 #include <string.h>
 
 #define BROKERS "localhost:9092"
-#define TOPIC "machine.whirlpooling"
+#define TOPIC "asaat67.machine.whirlpooling"
 #define WARMUP_POLLS 60  /* ~6 s: let the group assign partitions first */
 #define LISTEN_POLLS 150 /* ~15 s: wait for the answers */
 
@@ -143,7 +142,7 @@ This runs a real broker, whirlpooling 1, and the scheduler program from above. A
 export MSYS_NO_PATHCONV=1
 docker run -d --name kafka apache/kafka:4.1.0
 docker exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 \
-  --create --topic machine.whirlpooling --partitions 3
+  --create --topic asaat67.machine.whirlpooling --partitions 3
 ```
 
 If the topic command fails with a connection error, the broker isn't up yet. Wait a few seconds and run it again.
@@ -198,7 +197,7 @@ status 3 from whirlpooling-1, batch B-1
 
 ```bash
 MSYS_NO_PATHCONV=1 docker exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
-  --bootstrap-server localhost:9092 --topic machine.whirlpooling --from-beginning \
+  --bootstrap-server localhost:9092 --topic asaat67.machine.whirlpooling --from-beginning \
   --property print.key=true --property print.partition=true --property print.value=false \
   --timeout-ms 5000
 ```

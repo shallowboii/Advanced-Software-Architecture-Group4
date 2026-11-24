@@ -3,6 +3,10 @@ CPPFLAGS ?=
 CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -Werror -O2
 LDFLAGS ?=
 LDLIBS ?=
+KAFKA_COMMONS ?= ../machine_commons/machine_kafka
+PKG_CONFIG ?= pkg-config
+KAFKA_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags rdkafka 2>/dev/null)
+KAFKA_LIBS ?= $(shell $(PKG_CONFIG) --libs rdkafka 2>/dev/null || echo -lrdkafka)
 MQTT_COMMONS ?= ../machine_commons/machine_mqtt
 MQTT_C_DIR ?=
 MQTT_LIBS ?= -lmqttc
@@ -22,8 +26,8 @@ test: build/test-boiling test-controller
 	./build/test-boiling
 
 # Simulate heartbeat I/O and elapsed time without a broker or MQTT-C library.
-build/test-controller: src/main.c src/boiling.c src/boiling.h tests/controller_stubs.c $(MQTT_COMMONS)/heartbeat.h $(MQTT_COMMONS)/mqtt.h $(MQTT_COMMONS)/mqtt_pal.h | build
-	$(CC) $(CPPFLAGS) -Isrc -I$(MQTT_COMMONS) $(CFLAGS) -Wno-strict-prototypes -Dclock_gettime=test_clock_gettime -Dsleep=test_sleep src/main.c src/boiling.c tests/controller_stubs.c $(LDFLAGS) $(LDLIBS) -o $@
+build/test-controller: src/main.c src/boiling.c src/boiling.h tests/controller_stubs.c tests/include/librdkafka/rdkafka.h $(KAFKA_COMMONS)/machine_kafka.h $(MQTT_COMMONS)/heartbeat.h $(MQTT_COMMONS)/mqtt.h $(MQTT_COMMONS)/mqtt_pal.h | build
+	$(CC) $(CPPFLAGS) -D_POSIX_C_SOURCE=200809L -Isrc -Itests/include -I$(KAFKA_COMMONS) -I$(MQTT_COMMONS) $(CFLAGS) -Wno-strict-prototypes -Dclock_gettime=test_clock_gettime -Dsleep=test_sleep src/main.c src/boiling.c tests/controller_stubs.c $(LDFLAGS) $(LDLIBS) -o $@
 
 test-controller: build/test-controller
 	$(PYTHON) tests/test_controller.py ./build/test-controller
@@ -38,8 +42,8 @@ MQTT_SOURCES =
 MQTT_LINK = $(MQTT_LIBS)
 endif
 
-build/boiling-mqtt: src/main.c src/boiling.c src/boiling.h $(MQTT_COMMONS)/heartbeat.c $(MQTT_COMMONS)/heartbeat.h $(MQTT_COMMONS)/mqtt.h $(MQTT_COMMONS)/mqtt_pal.h $(MQTT_SOURCES) | build
-	$(CC) $(CPPFLAGS) -Isrc -I$(MQTT_COMMONS) $(MQTT_CPPFLAGS) $(CFLAGS) src/main.c src/boiling.c $(MQTT_COMMONS)/heartbeat.c $(MQTT_SOURCES) $(LDFLAGS) $(MQTT_LINK) $(LDLIBS) -pthread -o $@
+build/boiling-mqtt: src/main.c src/boiling.c src/boiling.h $(MQTT_COMMONS)/heartbeat.c $(MQTT_COMMONS)/heartbeat.h $(MQTT_COMMONS)/mqtt.h $(MQTT_COMMONS)/mqtt_pal.h $(MQTT_SOURCES) $(KAFKA_COMMONS)/machine_kafka.c $(KAFKA_COMMONS)/machine_kafka.h | build
+	$(CC) $(CPPFLAGS) -D_POSIX_C_SOURCE=200809L -I$(KAFKA_COMMONS) $(KAFKA_CFLAGS) -Isrc -I$(MQTT_COMMONS) $(MQTT_CPPFLAGS) $(CFLAGS) src/main.c src/boiling.c $(MQTT_COMMONS)/heartbeat.c $(MQTT_SOURCES) $(KAFKA_COMMONS)/machine_kafka.c $(LDFLAGS) $(KAFKA_LIBS) $(MQTT_LINK) $(LDLIBS) -pthread -o $@
 
 mqtt: build/boiling-mqtt
 

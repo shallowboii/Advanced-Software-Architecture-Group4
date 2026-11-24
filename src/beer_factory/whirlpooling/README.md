@@ -29,10 +29,14 @@ make clean  # deletes build/
 
 If gcc fails on Windows:
 
-- `Cannot create temporary file in C:\WINDOWS\`: run `make test demo TMP="$TMP" TEMP="$TEMP"`.
-- `cannot execute binary file`: `build/` has Linux binaries from a container, so run `make clean` first.
+```bash
+docker compose up -d --build
+```
 
-**The Dockerfile doesn't build at the moment**, so don't copy it as a template yet. It copies `scheduling/src/`, which isn't in `src/beer_factory`. It also lacks `machine_commons`, librdkafka and MQTT-C, which `make all` needs, and it expects `whirlpooling-demo`, which `make all` no longer builds. To run the controller, see [Run](#run).
+This builds all six machine images and starts their controllers with RabbitMQ,
+Kafka and Redis. Whirlpooling runs as machine `0`, uses `kafka:9093` and
+`rabbitmq:1883`, and waits for broker readiness and Kafka topic setup. Its Docker
+build runs the core tests before building the controller.
 
 ## Differences from boiling
 
@@ -45,7 +49,7 @@ At startup `main.c` starts the MQTT heartbeat, then connects to Kafka. Then it l
 
 ### Kafka commands
 
-Topic `machine.whirlpooling`, key = machine id. The machine handles only commands for its own id and skips everything else (statuses, including its own).
+Topic `asaat67.machine.whirlpooling`, key = machine id. The machine handles only commands for its own id and skips everything else (statuses, including its own).
 
 | Command | Whirlpool | Answer |
 | --- | --- | --- |
@@ -87,15 +91,18 @@ Each line is time, topic and payload in hex. The payload ends in `01000000` for 
 The controller needs librdkafka and MQTT-C, so on Windows run it in Linux (WSL or a container):
 
 ```bash
-TIME_SCALE=600 make run MQTT_C_DIR=/opt/MQTT-C   # 1 h run = 6 s
+make run MACHINE_ID=1 MQTT_C_DIR=/opt/MQTT-C
 ```
 
-`MQTT_C_DIR` points to an MQTT-C checkout; leave it out to link an installed `-lmqttc`. Create the Kafka topic before starting the machine. For a full test with a broker and a start command, see the [machine_kafka test](../machine_commons/machine_kafka/README.md#test-end-to-end-with-whirlpooling).
+`MQTT_C_DIR` points to an MQTT-C checkout; leave it out to link an installed `-lmqttc`. The controller uses the same numeric machine argument and clock updates as boiling. It waits for `KAFKA_START`, replies with `KAFKA_RUNNING`, and sends `KAFKA_IDLE` with the same batch ID after the one-hour run. Starts received while busy are ignored.
 
 | Environment | Default | Meaning |
 | --- | --- | --- |
-| `KAFKA_BROKERS` | required (`make run` uses `localhost:9092`) | Kafka servers, e.g. `kafka:29092` |
-| `MACHINE_ID` | number in the machine name | machine id, used for both Kafka and MQTT |
-| `TIME_SCALE` | 1 | simulated seconds per real second |
+| `KAFKA_BROKERS` | `localhost:9092` | Compose's published Kafka listener; use `kafka:9093` inside its network |
 
-Argument: `whirlpooling [machine-name]`, default `whirlpooling-1`.
+Heartbeats use Compose's RabbitMQ MQTT listener at `localhost:1883` with its
+`admin` / `admin123` credentials by default. Use `MQTT_HOST=rabbitmq` inside the
+Compose network. See the [shared heartbeat settings](../machine_commons/machine_mqtt/README.md)
+for environment overrides.
+
+Argument: `whirlpooling <machine-number>`, e.g. `./build/whirlpooling 1`. The Makefile's `MACHINE_ID` variable supplies this argument for `make run` (default: 1).

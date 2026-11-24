@@ -4,6 +4,7 @@ Stop any local broker before running. The heartbeat payload uses the shared
 library's native pair of integers: Unix timestamp and machine index.
 """
 import argparse
+import os
 import signal
 import socket
 import struct
@@ -43,6 +44,8 @@ def run(binary, machine="boiling", disconnect=False):
         process = subprocess.Popen(
             [binary, "7"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "MQTT_HOST": "127.0.0.1", "MQTT_PORT": "1883",
+                 "MQTT_USERNAME": "admin", "MQTT_PASSWORD": "admin123"},
         )
         try:
             connection, _ = listener.accept()
@@ -51,9 +54,15 @@ def run(binary, machine="boiling", disconnect=False):
                 header, body = read_packet(connection)
                 assert header == 0x10
                 assert body[:7] == b"\x00\x04MQTT\x04"
-                assert body[7] == 2  # Clean session, no will or authentication.
+                assert body[7] == 0xC2  # Clean session, username and password.
                 assert struct.unpack("!H", body[8:10])[0] == 60
-                assert body[12:] == expected_id
+                offset = 10
+                for expected in [expected_id, b"admin", b"admin123"]:
+                    size = struct.unpack("!H", body[offset:offset + 2])[0]
+                    offset += 2
+                    assert body[offset:offset + size] == expected
+                    offset += size
+                assert offset == len(body)
                 connection.sendall(b"\x20\x02\x00\x00")
 
                 arrivals = []

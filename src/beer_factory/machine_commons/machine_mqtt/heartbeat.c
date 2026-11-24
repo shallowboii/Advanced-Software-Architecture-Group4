@@ -21,11 +21,8 @@
 
 #define HEARTBEAT_INTERVAL_S 5
 
-#define MQTT_HOST "localhost"
-#define MQTT_PORT "1883"
-#define MQTT_NAME "boiling-1"
-
-int mqtt_fd;
+int mqtt_fd = -1;
+static int mqtt_initialized;
 int mqtt_machine_idx;
 struct mqtt_client client;
 uint8_t sendbuf[SENDBUFSZ], recvbuf[RECVBUFSZ];
@@ -75,12 +72,25 @@ static int connect_broker(const char *host, const char *port) {
 }
 
 enum MQTTErrors *heartbeat_init(char *machine_prefix, int machine_idx) {
+  heartbeat_destroy();
   mqtt_machine_idx = machine_idx;
 
-  int fd = connect_broker(MQTT_HOST, MQTT_PORT);
+  const char *host = getenv("MQTT_HOST");
+  const char *port = getenv("MQTT_PORT");
+  const char *username = getenv("MQTT_USERNAME");
+  const char *password = getenv("MQTT_PASSWORD");
+  if (host == NULL || host[0] == '\0')
+    host = "localhost";
+  if (port == NULL || port[0] == '\0')
+    port = "1883";
+  if (username == NULL)
+    username = "admin";
+  if (password == NULL)
+    password = "admin123";
+
+  int fd = connect_broker(host, port);
   if (fd < 0) {
-    fprintf(stderr, "Could not connect to MQTT broker %s:%s.\n", MQTT_HOST,
-            MQTT_PORT);
+    fprintf(stderr, "Could not connect to MQTT broker %s:%s.\n", host, port);
     mqtt_result = MQTT_ERROR_SOCKET_ERROR;
     return &mqtt_result;
   }
@@ -106,8 +116,7 @@ enum MQTTErrors *heartbeat_init(char *machine_prefix, int machine_idx) {
    *         client disconnects unexpectedly.
    *   NULL: no Last Will message payload.
    *   0: Last Will payload size in bytes.
-   *   NULL: no username.
-   *   NULL: no password.
+   *   username, password: RabbitMQ credentials (empty values disable auth).
    *   MQTT_CONNECT_CLEAN_SESSION: start a fresh session instead of resuming
    *                               saved subscriptions and pending messages.
    *   60: keep-alive interval in seconds for maintaining/detecting connection
@@ -117,16 +126,21 @@ enum MQTTErrors *heartbeat_init(char *machine_prefix, int machine_idx) {
   char machine_name[50];
   snprintf(machine_name, sizeof(machine_name), "%s-%i", machine_prefix,
            machine_idx);
-  mqtt_result = mqtt_connect(&client, machine_name, NULL, NULL, 0, NULL, NULL,
+  mqtt_result = mqtt_connect(&client, machine_name, NULL, NULL, 0,
+                             username[0] != '\0' ? username : NULL,
+                             password[0] != '\0' ? password : NULL,
                              MQTT_CONNECT_CLEAN_SESSION, 60);
 
   if (mqtt_result != MQTT_OK) {
     fprintf(stderr, "MQTT initialization: %s\n", mqtt_error_str(mqtt_result));
     pthread_mutex_destroy(&client.mutex);
     close(fd);
+    return &mqtt_result;
   }
 
   mqtt_fd = fd;
+  mqtt_initialized = 1;
+  last_heartbeat_s = 0;
   return &mqtt_result;
 }
 
@@ -142,12 +156,17 @@ enum MQTTErrors *heartbeat_send(const char *topic) {
 }
 
 void heartbeat_destroy(void) {
+  if (!mqtt_initialized)
+    return;
+
   if (mqtt_disconnect(&client) == MQTT_OK) {
     (void)mqtt_sync(&client);
   }
 
   pthread_mutex_destroy(&client.mutex);
   close(mqtt_fd);
+  mqtt_fd = -1;
+  mqtt_initialized = 0;
 }
 
 enum MQTTErrors *heartbeat_sync(void) {
@@ -158,7 +177,7 @@ enum MQTTErrors *heartbeat_sync(void) {
 enum MQTTErrors *heartbeat_update(const char *topic, uint64_t now_s) {
   uint64_t elapsed_s = (uint64_t)(now_s - last_heartbeat_s);
 
-  if (mqtt_result == MQTT_OK) {
+  if (mqtt_initialized && mqtt_result == MQTT_OK) {
     if (elapsed_s >= HEARTBEAT_INTERVAL_S) {
       heartbeat_send(topic);
       last_heartbeat_s = now_s;

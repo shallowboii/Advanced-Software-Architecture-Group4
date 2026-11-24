@@ -40,7 +40,10 @@ Run with a machine number:
 ```
 
 The controller passes this number to the shared heartbeat service in
-`../machine_commons/machine_mqtt`. The broker is fixed to `localhost:1883`.
+`../machine_commons/machine_mqtt`. Broker defaults match `../docker-compose.yml`:
+Kafka at `localhost:9092` and RabbitMQ MQTT at `localhost:1883`, using the
+`admin` / `admin123` account. See the [shared connection settings](../machine_commons/machine_mqtt/README.md)
+for environment overrides and Compose network addresses.
 The controller uses `atoi`; it currently does not reject malformed numeric
 arguments. SIGTERM and Ctrl-C use the default signal handlers.
 

@@ -8,10 +8,15 @@ BINARY = os.path.abspath(sys.argv.pop(1))
 
 
 class ControllerTests(unittest.TestCase):
-    def run_controller(self, *args, scenario="normal"):
+    def run_controller(self, *args, scenario="normal", brokers="test-broker:9092"):
+        env = {**os.environ, "CONTROLLER_SCENARIO": scenario}
+        if brokers is None:
+            env.pop("KAFKA_BROKERS", None)
+        else:
+            env["KAFKA_BROKERS"] = brokers
         return subprocess.run(
             [BINARY, *args], capture_output=True, text=True, timeout=5,
-            env={**os.environ, "CONTROLLER_SCENARIO": scenario},
+            env=env,
         )
 
     def test_requires_one_argument(self):
@@ -29,12 +34,22 @@ class ControllerTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn(f"INIT {number}\n", result.stdout)
 
+    def test_default_kafka_broker(self):
+        for brokers in [None, ""]:
+            with self.subTest(brokers=brokers):
+                result = self.run_controller("7", brokers=brokers)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("BROKERS localhost:9092\n", result.stdout)
+
     def test_batch_deadline_and_heartbeats_while_waiting(self):
         result = self.run_controller("7")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
         self.assertEqual(result.stdout.count("Boiling started"), 1)
         self.assertEqual(result.stdout.count("Boiling complete; waiting."), 1)
+        self.assertEqual(result.stdout.count("KAFKA 4 B-1\n"), 1)
+        self.assertEqual(result.stdout.count("KAFKA 3 B-1\n"), 1)
+        self.assertNotIn("B-busy", result.stdout)
         for tick in [0, 5, 3599, 3605]:
             self.assertIn(f"SEND {tick} boiling\n", result.stdout)
         self.assertEqual(result.stdout.count("SEND "), 4)
@@ -60,7 +75,18 @@ class ControllerTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("clock_gettime", result.stderr)
         self.assertIn("DESTROY", result.stdout)
+        self.assertIn("CONSUMER_CLOSE", result.stdout)
+        self.assertIn("PRODUCER_CLOSE", result.stdout)
         self.assertNotIn("Boiling complete", result.stdout)
+
+    def test_waits_for_start_for_this_machine(self):
+        for scenario in ["no-start", "wrong-id", "status-only"]:
+            with self.subTest(scenario=scenario):
+                result = self.run_controller("7", scenario=scenario)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn("Boiling started", result.stdout)
+                self.assertNotIn("KAFKA ", result.stdout)
+                self.assertIn("SEND 3605 boiling", result.stdout)
 
 
 if __name__ == "__main__":
