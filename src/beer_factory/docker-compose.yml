@@ -188,6 +188,234 @@ services:
       fermentation_maturation:
         condition: service_started
 
+  tank5:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["5"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank6:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["6"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank7:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["7"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank8:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["8"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank9:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["9"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank10:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["10"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank11:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["11"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank12:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["12"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank13:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["13"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank14:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["14"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank15:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["15"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank16:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["16"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank17:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["17"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank18:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["18"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank19:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["19"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank20:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["20"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank21:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["21"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank22:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["22"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
+  tank23:
+    <<: *machine
+    image: beer_factory-fermentation_maturation
+    command: ["23"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kafka-topics:
+        condition: service_completed_successfully
+      fermentation_maturation:
+        condition: service_started
+
   redis:
     image: redis:8.10.3
     container_name: redis

@@ -45,7 +45,7 @@ import java.util.regex.Pattern;
 public class GreedyScheduler {
 
     // ---- configuration ---------------------------------------------------
-    static final int MAX_BATCHES = 64;
+    static final int MAX_BATCHES = 100;
     static final int DEFAULT_BATCHES = 6;
     static final int RELEASE_INTERVAL = 0;          // hours between releases
     static final int TANK_STEP = 4;                 // step where the batch goes in a tank
@@ -54,7 +54,6 @@ public class GreedyScheduler {
     static final String CONSUMER_GROUP = "brewery-scheduler-" + java.util.UUID.randomUUID();
     static final int SECONDS_PER_SIM_HOUR = Integer.parseInt(env("SECONDS_PER_SIM_HOUR", "1")); // 1 sim hour = 1 real second
     static final int WARMUP_S = 5;
-    static final int RUN_TIMEOUT_S = Integer.parseInt(env("RUN_TIMEOUT_S", "3600"));
     static final long POLL_TIMEOUT_MS = 100;
 
     static final String MQTT_URI = env("MQTT_URI", "tcp://localhost:1883");
@@ -84,7 +83,7 @@ public class GreedyScheduler {
         new Step("lautering",    1, 2, "sweet_wort_batch"),
         new Step("boiling",      1, 1, "boiled_wort_batch"),
         new Step("whirlpooling", 1, 1, "clarified_wort_batch"),
-        new Step("fermentation_maturation", 5, 336, "green_beer_batch"),     // TANK_STEP
+        new Step("fermentation_maturation", 24, 336, "green_beer_batch"),     // TANK_STEP
         new Step("filtering",    1, 4, "filtered_beer_batch"),
     };
     static final int NUM_STEPS = PLANT.length;
@@ -531,13 +530,8 @@ public class GreedyScheduler {
 
         // ---- run the schedule, driven by machine statuses ----
         t0 = Instant.now();
-        boolean timedOut = false;
 
         while (!allDone()) {
-            if (Duration.between(t0, Instant.now()).toSeconds() >= RUN_TIMEOUT_S) {
-                timedOut = true;
-                break;
-            }
             for (int b = 0; b < n; b++)
                 for (int s = 0; s < NUM_STEPS; s++)
                     if (canStart(b, s)) sendStart(b, s);
@@ -549,8 +543,6 @@ public class GreedyScheduler {
         int nfailed = 0;
         for (boolean f : failed) if (f) nfailed++;
 
-        if (timedOut)
-            System.out.printf("%nTIMEOUT after %d s, some machines never finished%n", RUN_TIMEOUT_S);
         System.out.printf("%nPlanned makespan: %d hours, actual: %d hours, failed batches: %d%n",
                 plannedMakespan, simHour(), nfailed);
 
@@ -558,6 +550,6 @@ public class GreedyScheduler {
         cons.close();
         producer.close();
         redis.close();
-        System.exit(timedOut || nfailed > 0 ? 1 : 0);
+        System.exit(nfailed > 0 ? 1 : 0);
     }
 }

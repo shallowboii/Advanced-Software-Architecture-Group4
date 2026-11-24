@@ -44,17 +44,17 @@ import java.util.regex.Pattern;
 public class StarScheduler {
 
     // ---- configuration ---------------------------------------------------
-    static final int MAX_BATCHES = 64;
+    static final int MAX_BATCHES = 100;
     static final int DEFAULT_BATCHES = 6;
     static final int TANK_STEP = 4;          // maturation
     static final int WHIRLPOOL_STEP = 3;     // produces clarified wort
-    static final int FREE_TANK_MIN = 4;      // start_mashing guard: free_tank >= 4
+    static final int FREE_TANK_MIN = 3;      // start_mashing guard: free_tank >= 4
 
     static final String BROKERS = env("KAFKA_BROKERS", "localhost:9092");
     static final String CONSUMER_GROUP = "brewery-scheduler-" + java.util.UUID.randomUUID();
     static final int SECONDS_PER_SIM_HOUR = Integer.parseInt(env("SECONDS_PER_SIM_HOUR", "1"));
     static final int WARMUP_S = 5;
-    static final int RUN_TIMEOUT_S = Integer.parseInt(env("RUN_TIMEOUT_S", "3600"));
+    //static final int RUN_TIMEOUT_S = Integer.parseInt(env("RUN_TIMEOUT_S", "3600"));
     static final long POLL_TIMEOUT_MS = 100;
 
     static final String MQTT_URI = env("MQTT_URI", "tcp://localhost:1883");
@@ -84,7 +84,7 @@ public class StarScheduler {
         new Step("lautering",    1, 2, "sweet_wort_batch"),
         new Step("boiling",      1, 1, "boiled_wort_batch"),
         new Step("whirlpooling", 1, 1, "clarified_wort_batch"),
-        new Step("fermentation_maturation", 5, 336, "green_beer_batch"),     // TANK_STEP, needs >= FREE_TANK_MIN
+        new Step("fermentation_maturation", 24, 336, "green_beer_batch"),     // TANK_STEP, needs >= FREE_TANK_MIN
         new Step("filtering",    1, 4, "filtered_beer_batch"),
     };
     static final int NUM_STEPS = PLANT.length;
@@ -324,7 +324,7 @@ public class StarScheduler {
 
     // ---- commands --------------------------------------------------------
     static void sendStart(int b, int s, int m) {
-        byte[] payload = Wire.encodeStart(PLANT[s].name(), m + 1, "batch" + batches[b].id,
+        byte[] payload = Wire.encodeStart(PLANT[s].name(), m + ID_BASE, "batch" + batches[b].id,
             "batch" + batches[b].id + "-step" + (s + 1) + "-start",
             "duration_s", durationS(s, m));
         producer.send(new ProducerRecord<>(topic(s),
@@ -534,10 +534,6 @@ public class StarScheduler {
         boolean timedOut = false;
 
         while (!allDone()) {
-            if (Duration.between(t0, Instant.now()).toSeconds() >= RUN_TIMEOUT_S) {
-                timedOut = true;
-                break;
-            }
             fireEdges();
             pollKafka(cons);
             hbPoll();
@@ -546,8 +542,6 @@ public class StarScheduler {
         int nfailed = 0;
         for (int b = 0; b < started; b++) if (failed[b]) nfailed++;
 
-        if (timedOut)
-            System.out.printf("%nTIMEOUT after %d s, some machines never finished%n", RUN_TIMEOUT_S);
         System.out.printf("%nActual: %d hours, batches started: %d, failed batches: %d%n",
                 simHour(), started, nfailed);
 
