@@ -1,0 +1,3 @@
+# Only needed for the chart (machine_utilization.png).
+# The tables and the CSV work with plain Python 3.10+.
+matplotlib
