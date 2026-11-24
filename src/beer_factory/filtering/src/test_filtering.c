@@ -20,22 +20,22 @@ int main(void) {
   assert(filtering_update(&filtering, 9) == FILTERING_INVALID_TIME);
   assert(filtering.last_time_seconds == 10);
   assert(filtering_update(&filtering, 14) == FILTERING_NO_CHANGE);
-  assert(filtering_update(&filtering, 14409) == FILTERING_NO_CHANGE);
+  assert(filtering_update(&filtering, 7209) == FILTERING_NO_CHANGE);
   assert(batches.finished_batches == 0);
-  assert(filtering_update(&filtering, 14410) == FILTERING_DONE);
+  assert(filtering_update(&filtering, 7210) == FILTERING_DONE);
   assert(filtering.state == FILTERING_WAIT);
   assert(batches.finished_batches == 1);
-  assert(filtering_update(&filtering, 14410) == FILTERING_INVALID_ARGUMENT);
+  assert(filtering_update(&filtering, 7210) == FILTERING_INVALID_ARGUMENT);
   assert(batches.finished_batches == 1);
 
   batches.beer_batches = 2;
-  assert(filtering_start(&filtering, 14409) == FILTERING_INVALID_TIME);
+  assert(filtering_start(&filtering, 7209) == FILTERING_INVALID_TIME);
   assert(batches.beer_batches == 2);
-  assert(filtering_start(&filtering, 14411) == FILTERING_STARTED);
-  assert(filtering_update(&filtering, 28812) == FILTERING_DONE);
+  assert(filtering_start(&filtering, 7211) == FILTERING_STARTED);
+  assert(filtering_update(&filtering, 14412) == FILTERING_DONE);
   assert(batches.beer_batches == 1 && batches.finished_batches == 2);
-  assert(filtering_start(&filtering, 28812) == FILTERING_STARTED);
-  assert(filtering_update(&filtering, 43212) == FILTERING_DONE);
+  assert(filtering_start(&filtering, 14412) == FILTERING_STARTED);
+  assert(filtering_update(&filtering, 21612) == FILTERING_DONE);
   assert(batches.beer_batches == 0 && batches.finished_batches == 3);
 
   puts("filtering: all tests passed");

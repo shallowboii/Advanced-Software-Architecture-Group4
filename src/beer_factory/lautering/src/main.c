@@ -87,7 +87,10 @@ int main(int argc, char **argv) {
       break;
     }
 
-    c.now = now.tv_sec;
+    /* Simulated seconds: real time scaled by TIME_DIVISOR, kept below a second
+     * so a fast clock does not round steps to whole real seconds. */
+    c.now = (uint64_t)now.tv_sec * TIME_DIVISOR +
+            (uint64_t)now.tv_nsec * TIME_DIVISOR / 1000000000;
     kafka_poll(consumer, on_message, &c);
     rd_kafka_poll(c.producer, 0);
 
@@ -99,7 +102,8 @@ int main(int argc, char **argv) {
     }
 
     heartbeat_update("lautering", now.tv_sec);
-    sleep(1);
+    /* Short pause: at 1 s = 1 h a one-second sleep is a simulated hour. */
+    nanosleep(&(struct timespec){.tv_nsec = 2000000}, NULL);
   }
 
   heartbeat_destroy();

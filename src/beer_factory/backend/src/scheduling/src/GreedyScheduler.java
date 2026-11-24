@@ -84,7 +84,7 @@ public class GreedyScheduler {
         new Step("boiling",      1, 1, "boiled_wort_batch"),
         new Step("whirlpooling", 1, 1, "clarified_wort_batch"),
         new Step("fermentation_maturation", 24, 336, "green_beer_batch"),     // TANK_STEP
-        new Step("filtering",    1, 4, "filtered_beer_batch"),
+        new Step("filtering",    1, 2, "filtered_beer_batch"),
     };
     static final int NUM_STEPS = PLANT.length;
     static final int MAX_MACHINES = Arrays.stream(PLANT).mapToInt(Step::count).max().orElse(1);

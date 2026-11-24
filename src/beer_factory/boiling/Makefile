@@ -30,7 +30,7 @@ test: build/test-boiling test-controller
 
 # Simulate heartbeat I/O and elapsed time without a broker or MQTT-C library.
 build/test-controller: src/main.c src/boiling.c src/boiling.h tests/controller_stubs.c tests/include/librdkafka/rdkafka.h $(KAFKA_COMMONS)/machine_kafka.h $(MQTT_COMMONS)/heartbeat.h $(MQTT_COMMONS)/mqtt.h $(MQTT_COMMONS)/mqtt_pal.h | build
-	$(CC) $(CPPFLAGS) -D_POSIX_C_SOURCE=200809L -Isrc -Itests/include -I$(KAFKA_COMMONS) -I$(MQTT_COMMONS) $(CFLAGS) -Wno-strict-prototypes -Dclock_gettime=test_clock_gettime -Dsleep=test_sleep src/main.c src/boiling.c tests/controller_stubs.c $(LDFLAGS) $(LDLIBS) -o $@
+	$(CC) $(CPPFLAGS) -D_POSIX_C_SOURCE=200809L -Isrc -Itests/include -I$(KAFKA_COMMONS) -I$(MQTT_COMMONS) $(CFLAGS) -Wno-strict-prototypes -Dclock_gettime=test_clock_gettime -Dnanosleep=test_nanosleep src/main.c src/boiling.c tests/controller_stubs.c $(LDFLAGS) $(LDLIBS) -o $@
 
 test-controller: build/test-controller
 	$(PYTHON) tests/test_controller.py ./build/test-controller

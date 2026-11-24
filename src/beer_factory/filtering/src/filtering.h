@@ -2,11 +2,13 @@
 
 #include <stdint.h>
 
+/* Speed-up of the simulated clock over real time (3600: 1 s = 1 h).
+ * Durations below are simulated seconds; main.c scales the clock. */
 #ifndef TIME_DIVISOR
 #define TIME_DIVISOR 1
 #endif
 
-#define FILTERING_DURATION_SECONDS ((4 * 3600) / TIME_DIVISOR)
+#define FILTERING_DURATION_SECONDS (2 * 3600)
 
 typedef enum { FILTERING_WAIT, FILTERING_FILTER } filtering_state_t;
 
