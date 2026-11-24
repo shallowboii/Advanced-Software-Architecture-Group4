@@ -6,7 +6,7 @@
 #define TIME_DIVISOR 1
 #endif
 
-#define FILTERING_DURATION_SECONDS ((4 * 3600) / TIME_DIVISOR)
+#define FILTERING_DURATION_SECONDS ((2 * 3600) / TIME_DIVISOR)
 
 typedef enum { FILTERING_WAIT, FILTERING_FILTER } filtering_state_t;
 

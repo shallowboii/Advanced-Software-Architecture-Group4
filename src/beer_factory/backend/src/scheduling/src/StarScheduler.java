@@ -48,7 +48,6 @@ public class StarScheduler {
     static final int DEFAULT_BATCHES = 6;
     static final int TANK_STEP = 4;          // maturation
     static final int WHIRLPOOL_STEP = 3;     // produces clarified wort
-    static final int FREE_TANK_MIN = 3;      // start_mashing guard: free_tank >= 4
 
     static final String BROKERS = env("KAFKA_BROKERS", "localhost:9092");
     static final String CONSUMER_GROUP = "brewery-scheduler-" + java.util.UUID.randomUUID();
@@ -84,8 +83,8 @@ public class StarScheduler {
         new Step("lautering",    1, 2, "sweet_wort_batch"),
         new Step("boiling",      1, 1, "boiled_wort_batch"),
         new Step("whirlpooling", 1, 1, "clarified_wort_batch"),
-        new Step("fermentation_maturation", 24, 336, "green_beer_batch"),     // TANK_STEP, needs >= FREE_TANK_MIN
-        new Step("filtering",    1, 4, "filtered_beer_batch"),
+        new Step("fermentation_maturation", 24, 336, "green_beer_batch"),     // TANK_STEP
+        new Step("filtering",    1, 2, "filtered_beer_batch"),
     };
     static final int NUM_STEPS = PLANT.length;
     static final int MAX_MACHINES = Arrays.stream(PLANT).mapToInt(Step::count).max().orElse(1);
@@ -299,15 +298,24 @@ public class StarScheduler {
 
     static final int TANK_TIME_LEFT_LIMIT_HOURS = 6;
 
-    static boolean anyAlmostDone() {
+    /** Tanks that will be free within TANK_TIME_LEFT_LIMIT_HOURS. */
+    static int almostDoneCount() {
         long now = Instant.now().getEpochSecond();
+        int c = 0;
         for (int t = 0; t < PLANT[TANK_STEP].count(); t++) {
             int b = current[TANK_STEP][t];
             if (b < 0 || st[b][TANK_STEP] != StepState.RUNNING) continue;
-            if (tankEnd[t] - now <= (long) TANK_TIME_LEFT_LIMIT_HOURS * SECONDS_PER_SIM_HOUR)
-                return true;
+            if (tankEnd[t] - now <= (long) TANK_TIME_LEFT_LIMIT_HOURS * SECONDS_PER_SIM_HOUR) c++;
         }
-        return false;
+        return c;
+    }
+
+    /** Batches that are in the brewhouse and have no tank yet. */
+    static int inFlight() {
+        int c = 0;
+        for (int b = 0; b < started; b++)
+            if (!failed[b] && batches[b].tank < 0) c++;
+        return c;
     }
 
     static int idleMachine(int s) {
@@ -346,8 +354,11 @@ public class StarScheduler {
         sendStart(b, 0, m);
     }
 
+    // Start a batch only if a tank is free, or about to be free, for it and for
+    // every batch already in the brewhouse. Counting only free tanks let wort
+    // wait for a tank for most of a fermentation cycle.
     static boolean canMash() {
-        return started < n && !isMashing && (freeTank() >= FREE_TANK_MIN || anyAlmostDone());
+        return started < n && !isMashing && inFlight() < freeTank() + almostDoneCount();
     }
 
     static boolean inLocation(int b, int s) {
@@ -494,12 +505,6 @@ public class StarScheduler {
                 System.err.println("too many machines in step " + (s + 1));
                 System.exit(1);
             }
-
-        if (PLANT[TANK_STEP].count() < FREE_TANK_MIN) {
-            System.err.printf("plant has %d tanks, start_mashing needs free_tank >= %d%n",
-                    PLANT[TANK_STEP].count(), FREE_TANK_MIN);
-            System.exit(1);
-        }
 
         for (StepState[] row : st) Arrays.fill(row, StepState.PENDING);
         for (int[] row : current) Arrays.fill(row, -1);
