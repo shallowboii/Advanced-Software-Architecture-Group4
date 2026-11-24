@@ -3,11 +3,13 @@
 #include <stdint.h>
 
 /* T_MASHING is two hours in Beer_Factory.xml. */
+/* Speed-up of the simulated clock over real time (3600: 1 s = 1 h).
+ * Durations below are simulated seconds; main.c scales the clock. */
 #ifndef TIME_DIVISOR
 #define TIME_DIVISOR 1
 #endif
 
-#define MASHING_DURATION_SECONDS (7200 / TIME_DIVISOR)
+#define MASHING_DURATION_SECONDS 7200
 
 typedef enum { MASHING_WAIT, MASHING_MASH } mashing_state_t;
 

@@ -30,7 +30,7 @@
 
 #define KAFKA_ERROR_TEXT_LEN   512    /* room for a librdkafka error message */
 #define KAFKA_KEY_LEN          16     /* machine id written as text */
-#define KAFKA_POLL_TIMEOUT_MS  100    /* how long kafka_poll waits */
+#define KAFKA_POLL_TIMEOUT_MS  5      /* how long kafka_poll waits */
 #define KAFKA_FLUSH_TIMEOUT_MS 10000  /* how long close waits for sending */
 
 /* What a message is about */

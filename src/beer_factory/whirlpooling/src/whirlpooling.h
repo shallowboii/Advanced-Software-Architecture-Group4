@@ -17,11 +17,13 @@
 
 /* T_WHIRLPOOLING = 1 h (FR-10.4); a start can set another run time
  * (whirlpooling_set_duration). */
+/* Speed-up of the simulated clock over real time (3600: 1 s = 1 h).
+ * Durations below are simulated seconds; main.c scales the clock. */
 #ifndef TIME_DIVISOR
 #define TIME_DIVISOR 1
 #endif
 
-#define WHIRLPOOLING_DURATION_SECONDS (3600 / TIME_DIVISOR)
+#define WHIRLPOOLING_DURATION_SECONDS 3600
 
 /*
  * STOPPED is not in the UPPAAL model: it is the stop command (FR-13). The
