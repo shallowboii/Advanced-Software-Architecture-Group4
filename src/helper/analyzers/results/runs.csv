@@ -1,0 +1,7 @@
+scheduler,batches,run_hours,throughput_per_day,lead_time_avg_h,lead_time_min_h,lead_time_max_h
+Greedy,24,529,1.089,348.0,346,350
+Greedy,50,1044,1.149,348.1,346,350
+Greedy,100,1750,1.371,348.2,346,350
+Star,24,492,1.171,374.0,348,399
+Star,50,1029,1.166,377.4,347,589
+Star,100,1719,1.396,403.9,347,613
