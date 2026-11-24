@@ -1,0 +1,3 @@
+# Only needed for the charts (*.png).
+# The tables and the CSV files work with plain Python 3.10+.
+matplotlib

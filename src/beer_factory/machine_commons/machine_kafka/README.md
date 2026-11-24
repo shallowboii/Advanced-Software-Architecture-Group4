@@ -29,7 +29,9 @@ Receive errors, invalid payload sizes and immediate send failures are reported t
 | `kafka_poll(consumer, handler, context)` | waits up to 100 ms for one message, calls `handler(&msg, context)`, then commits. Returns 1 if handled, 0 if none came, -1 on a receive error or invalid payload |
 | `kafka_consumer_close(consumer)` | leaves the group and frees the consumer |
 
-`context` is passed through to your handler unchanged. Use it to reach your own state without globals.
+`handler` is your function of type `kafka_message_handler`: `void handler(const kafka_message_t *msg, void *context)`. `context` is passed through to it unchanged. Use it to reach your own state without globals.
+
+If a sent message can't be delivered, `on_delivery_report` in `machine_kafka.c` prints it to stderr. It only runs during `kafka_send`, `kafka_producer_close` or `rd_kafka_poll(producer, 0)`, so call the last one in your loop.
 
 Receive errors and invalid payloads are freed without invoking the handler or committing their offsets. Successful send queueing does not guarantee delivery: asynchronous delivery failures are printed by the delivery callback.
 
@@ -164,6 +166,13 @@ git -c advice.detachedHead=false clone -q --depth 1 -b v1.1.7 \
 ```bash
 make -C whirlpooling build/whirlpooling MQTT_C_DIR=/opt/MQTT-C
 KAFKA_BROKERS=localhost:9092 TIME_SCALE=600 ./whirlpooling/build/whirlpooling whirlpooling-1 &
+```
+
+This test has no MQTT broker, so whirlpooling first prints the following. That's expected, and the Kafka test works without it. To test the heartbeat too, see the [whirlpooling README](../../whirlpooling/README.md#mqtt-heartbeat).
+
+```text
+Could not connect to MQTT broker localhost:1883.
+Could not start MQTT!
 ```
 
 **5. Wait about 10 s** so that whirlpooling's consumer gets its partitions. Then save the scheduler program from above as `/tmp/send_start.c` and run it:
