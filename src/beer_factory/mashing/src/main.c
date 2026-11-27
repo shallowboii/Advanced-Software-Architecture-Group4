@@ -37,16 +37,34 @@ static void send_status(controller_t *c, kafka_type_t type) {
 
 static void on_message(const kafka_message_t *msg, void *context) {
   controller_t *c = context;
-  if (msg->machine_id != c->id || msg->type != KAFKA_START ||
-      c->mashing.state != MASHING_WAIT)
+  if (msg->machine_id != c->id)
     return;
 
-  if (mashing_start(&c->mashing, c->now) != MASHING_STARTED)
-    return;
-  memcpy(c->batch_id, msg->batch_id, sizeof(c->batch_id));
-  printf("Mashing started\n");
-  send_status(c, KAFKA_RUNNING);
-  /* STOP / FLUSH and start parameters are not handled, as in other machines. */
+  switch (msg->type) {
+  case KAFKA_START:
+    if (c->mashing.state != MASHING_WAIT)
+      return;
+
+    if (mashing_start(&c->mashing, c->now) != MASHING_STARTED)
+      return;
+    memcpy(c->batch_id, msg->batch_id, sizeof(c->batch_id));
+    printf("Mashing started\n");
+    send_status(c, KAFKA_RUNNING);
+    break;
+
+  case KAFKA_STOP:
+    mashing_stop(&c->mashing);
+    send_status(c, KAFKA_IDLE);
+    break;
+
+  case KAFKA_FLUSH:
+    mashing_flush(&c->mashing);
+    send_status(c, KAFKA_IDLE);
+    break;
+
+  default:
+    break;
+  }
 }
 
 int main(int argc, char **argv) {

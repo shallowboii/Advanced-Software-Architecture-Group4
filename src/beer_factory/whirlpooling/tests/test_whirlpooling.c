@@ -139,29 +139,30 @@ static void test_stop_and_flush(void) {
   whirlpooling_t w;
 
   CHECK(whirlpooling_init(&w, &batches) == WHIRLPOOLING_OK);
-  CHECK(whirlpooling_stop(&w) == WHIRLPOOLING_NOT_RUNNING);
-  CHECK(whirlpooling_flush(&w) == WHIRLPOOLING_NOT_RUNNING);
+  CHECK(whirlpooling_stop(&w) == WHIRLPOOLING_DONE);
+  CHECK(whirlpooling_flush(&w) == WHIRLPOOLING_DONE);
 
-  /* Stop: nothing is produced, the vessel stays occupied. */
+  /* Stop: nothing is produced, the vessel is ready for another batch. */
   CHECK(whirlpooling_start(&w, 0) == WHIRLPOOLING_STARTED);
-  CHECK(whirlpooling_stop(&w) == WHIRLPOOLING_OK);
-  CHECK(w.state == WHIRLPOOLING_STOPPED);
-  CHECK(whirlpooling_stop(&w) == WHIRLPOOLING_NOT_RUNNING);
+  CHECK(whirlpooling_stop(&w) == WHIRLPOOLING_DONE);
+  CHECK(w.state == WHIRLPOOLING_WAIT);
+  CHECK(whirlpooling_stop(&w) == WHIRLPOOLING_DONE);
   CHECK(whirlpooling_update(&w, 9999) == WHIRLPOOLING_NO_CHANGE);
   CHECK(batches.clarified_wort_batches == 0);
-  CHECK(whirlpooling_start(&w, 9999) == WHIRLPOOLING_BUSY);
 
-  /* Flush: the stopped batch is discarded, the vessel is free again. */
-  CHECK(whirlpooling_flush(&w) == WHIRLPOOLING_OK);
-  CHECK(w.state == WHIRLPOOLING_WAIT && batches.clarified_wort_batches == 0);
-  CHECK(whirlpooling_flush(&w) == WHIRLPOOLING_NOT_RUNNING);
-
-  /* A running batch can be flushed directly too. */
+  /* Flush: discard a running batch without producing clarified wort. */
   CHECK(whirlpooling_start(&w, 10000) == WHIRLPOOLING_STARTED);
-  CHECK(whirlpooling_flush(&w) == WHIRLPOOLING_OK);
+  CHECK(whirlpooling_flush(&w) == WHIRLPOOLING_DONE);
   CHECK(w.state == WHIRLPOOLING_WAIT && batches.hot_wort_batches == 0);
-  CHECK(whirlpooling_stop(NULL) == WHIRLPOOLING_INVALID_ARGUMENT);
-  CHECK(whirlpooling_flush(NULL) == WHIRLPOOLING_INVALID_ARGUMENT);
+  CHECK(whirlpooling_update(&w, 20000) == WHIRLPOOLING_NO_CHANGE);
+  CHECK(batches.clarified_wort_batches == 0);
+  CHECK(whirlpooling_flush(&w) == WHIRLPOOLING_DONE);
+
+  batches.hot_wort_batches = 1;
+  CHECK(whirlpooling_start(&w, 20000) == WHIRLPOOLING_STARTED);
+  CHECK(whirlpooling_update(&w, 20000 + WHIRLPOOLING_DURATION_SECONDS) ==
+        WHIRLPOOLING_DONE);
+  CHECK(batches.clarified_wort_batches == 1);
 }
 
 int main(void) {

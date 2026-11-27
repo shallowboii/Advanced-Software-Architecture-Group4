@@ -26,6 +26,16 @@ mashing_result_t mashing_start(mashing_t *mashing, uint64_t now_seconds) {
   return MASHING_STARTED;
 }
 
+mashing_result_t mashing_stop(mashing_t *mashing) {
+  mashing->state = MASHING_WAIT;
+  return MASHING_DONE;
+}
+
+mashing_result_t mashing_flush(mashing_t *mashing) {
+  mashing->state = MASHING_WAIT;
+  return MASHING_DONE;
+}
+
 mashing_result_t mashing_update(mashing_t *mashing, uint64_t now_seconds) {
   if (mashing->state != MASHING_MASH) {
     return MASHING_INVALID_ARGUMENT;

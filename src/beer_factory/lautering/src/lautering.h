@@ -33,6 +33,8 @@ void lautering_init(lautering_t *lautering, lautering_batches_t *batches);
 
 /* Wait -> Lauter: needs one wort batch, takes it. */
 lautering_result_t lautering_start(lautering_t *lautering, uint64_t now_seconds);
+lautering_result_t lautering_stop(lautering_t *lautering);
+lautering_result_t lautering_flush(lautering_t *lautering);
 
 /*
  * Advances time. At/after the two-hour deadline, returns LAUTERING_DONE once,

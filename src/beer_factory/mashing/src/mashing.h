@@ -28,6 +28,8 @@ void mashing_init(mashing_t *mashing, unsigned int *wort_batches);
 
 /* Accepts start_mashing and resets the clock using monotonic seconds. */
 mashing_result_t mashing_start(mashing_t *mashing, uint64_t now_seconds);
+mashing_result_t mashing_stop(mashing_t *mashing);
+mashing_result_t mashing_flush(mashing_t *mashing);
 
 /*
  * Advances time using an absolute monotonic timestamp in seconds.

@@ -34,6 +34,8 @@ typedef struct {
 
 void boiling_init(boiling_t *boiling, boiling_batches_t *batches);
 boiling_result_t boiling_start(boiling_t *boiling, uint64_t now_seconds);
+boiling_result_t boiling_stop(boiling_t *boiling);
+boiling_result_t boiling_flush(boiling_t *boiling);
 
 /*
  * Advances time. At/after the one-hour deadline, returns BOILING_DONE once,
