@@ -2,6 +2,12 @@
 
 #include <stdint.h>
 
+/* Speed-up of the simulated clock over real time (3600: 1 s = 1 h).
+ * Durations below are simulated seconds; main.c scales the clock. */
+#ifndef TIME_DIVISOR
+#define TIME_DIVISOR 1
+#endif
+
 #define LAUTERING_DURATION_SECONDS 7200
 
 typedef enum { LAUTERING_WAIT, LAUTERING_LAUTER } lautering_state_t;
