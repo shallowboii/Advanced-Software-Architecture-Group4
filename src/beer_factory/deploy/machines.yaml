@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mashing
+  labels:
+    app.kubernetes.io/component: machine
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mashing
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mashing
+        app.kubernetes.io/component: machine
+    spec:
+      containers:
+        - name: machine
+          image: docker.io/beer-factory/mashing:dev
+          args: ["0"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lautering
+  labels:
+    app.kubernetes.io/component: machine
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lautering
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lautering
+        app.kubernetes.io/component: machine
+    spec:
+      containers:
+        - name: machine
+          image: docker.io/beer-factory/lautering:dev
+          args: ["0"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: boiling
+  labels:
+    app.kubernetes.io/component: machine
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: boiling
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: boiling
+        app.kubernetes.io/component: machine
+    spec:
+      containers:
+        - name: machine
+          image: docker.io/beer-factory/boiling:dev
+          args: ["0"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whirlpooling
+  labels:
+    app.kubernetes.io/component: machine
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: whirlpooling
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: whirlpooling
+        app.kubernetes.io/component: machine
+    spec:
+      containers:
+        - name: machine
+          image: docker.io/beer-factory/whirlpooling:dev
+          args: ["0"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: filtering
+  labels:
+    app.kubernetes.io/component: machine
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: filtering
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: filtering
+        app.kubernetes.io/component: machine
+    spec:
+      containers:
+        - name: machine
+          image: docker.io/beer-factory/filtering:dev
+          args: ["0"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fermentation-maturation
+  labels:
+    app.kubernetes.io/component: machine
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fermentation-maturation
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fermentation-maturation
+        app.kubernetes.io/component: machine
+    spec:
+      containers:
+        - name: machine
+          image: docker.io/beer-factory/fermentation-maturation:dev
+          args: ["0"]

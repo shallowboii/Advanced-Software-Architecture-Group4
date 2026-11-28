@@ -1,0 +1,6 @@
+asaat67.machine.mashing
+asaat67.machine.lautering
+asaat67.machine.boiling
+asaat67.machine.whirlpooling
+asaat67.machine.filtering
+asaat67.machine.fermentation_maturation

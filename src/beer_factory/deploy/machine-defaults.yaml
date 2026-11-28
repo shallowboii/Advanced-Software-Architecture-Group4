@@ -1,0 +1,72 @@
+# Applied to all six machine Deployments by kustomization.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: machine-defaults
+spec:
+  template:
+    spec:
+      automountServiceAccountToken: false
+      initContainers:
+        - name: wait-for-mqtt
+          image: busybox:1.37.0
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              until nc -z -w 2 rabbitmq 1883; do
+                echo "Waiting for RabbitMQ MQTT listener..."
+                sleep 3
+              done
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 32Mi
+        - name: wait-for-topics
+          image: apache/kafka:4.4.0
+          command: [/bin/sh, /bootstrap/wait-for-topics.sh]
+          env:
+            - name: KAFKA_HEAP_OPTS
+              value: -Xms32m -Xmx128m
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 384Mi
+          volumeMounts:
+            - name: bootstrap
+              mountPath: /bootstrap
+              readOnly: true
+      containers:
+        - name: machine
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: machine-config
+          env:
+            - name: MQTT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: messaging-credentials
+                  key: username
+            - name: MQTT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: messaging-credentials
+                  key: password
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: kafka-bootstrap
