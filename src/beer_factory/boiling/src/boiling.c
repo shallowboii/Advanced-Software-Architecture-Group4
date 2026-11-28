@@ -34,6 +34,16 @@ boiling_result_t boiling_start(boiling_t *boiling, uint64_t now_seconds) {
   return BOILING_STARTED;
 }
 
+boiling_result_t boiling_stop(boiling_t *boiling) {
+  boiling->state = BOILING_WAIT;
+  return BOILING_DONE;
+}
+
+boiling_result_t boiling_flush(boiling_t *boiling) {
+  boiling->state = BOILING_WAIT;
+  return BOILING_DONE;
+}
+
 boiling_result_t boiling_update(boiling_t *boiling, uint64_t now_seconds) {
   if (boiling->state != BOILING_BOIL) {
     return BOILING_INVALID_ARGUMENT;

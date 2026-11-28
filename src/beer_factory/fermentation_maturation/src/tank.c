@@ -51,6 +51,26 @@ tank_result_t tank_start(tank_t *tank, uint64_t now_seconds) {
   return TANK_STARTED;
 }
 
+tank_result_t tank_stop(tank_t *tank) {
+  if (tank->state != TANK_WAIT) {
+    tank->shared->tanks_status[tank->tank_idx] = false;
+    tank->shared->free_tank++;
+    tank->shared->almost_done[tank->tank_idx] = false;
+  }
+  tank->state = TANK_WAIT;
+  return TANK_OK;
+}
+
+tank_result_t tank_flush(tank_t *tank) {
+  if (tank->state != TANK_WAIT) {
+    tank->shared->tanks_status[tank->tank_idx] = false;
+    tank->shared->free_tank++;
+    tank->shared->almost_done[tank->tank_idx] = false;
+  }
+  tank->state = TANK_WAIT;
+  return TANK_OK;
+}
+
 tank_result_t tank_update(tank_t *tank, uint64_t now_seconds) {
   if (now_seconds < tank->last_time_seconds) {
     return TANK_INVALID_TIME;

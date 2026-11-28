@@ -38,17 +38,37 @@ static void send_status(controller_t *c, kafka_type_t type) {
 
 static void on_message(const kafka_message_t *msg, void *context) {
   controller_t *c = context;
-  if (msg->machine_id != c->id || msg->type != KAFKA_START ||
-      c->filtering.state != FILTERING_WAIT)
+  if (msg->machine_id != c->id)
     return;
 
-  c->batches.beer_batches = 1;
-  if (filtering_start(&c->filtering, c->now) != FILTERING_STARTED)
-    return;
-  memcpy(c->batch_id, msg->batch_id, sizeof(c->batch_id));
-  printf("Filtering started\n");
-  send_status(c, KAFKA_RUNNING);
-  /* STOP / FLUSH and start parameters are not handled, as in whirlpooling. */
+  switch (msg->type) {
+  case KAFKA_START:
+    if (c->filtering.state != FILTERING_WAIT)
+      return;
+
+    c->batches.beer_batches = 1;
+    if (filtering_start(&c->filtering, c->now) != FILTERING_STARTED)
+      return;
+    memcpy(c->batch_id, msg->batch_id, sizeof(c->batch_id));
+    printf("Filtering started\n");
+    send_status(c, KAFKA_RUNNING);
+    break;
+
+  case KAFKA_STOP:
+    filtering_stop(&c->filtering);
+    printf("Filtering stopped\n");
+    send_status(c, KAFKA_IDLE);
+    break;
+
+  case KAFKA_FLUSH:
+    filtering_flush(&c->filtering);
+    printf("Filtering flushed\n");
+    send_status(c, KAFKA_IDLE);
+    break;
+
+  default:
+    break;
+  }
 }
 
 int main(int argc, char **argv) {

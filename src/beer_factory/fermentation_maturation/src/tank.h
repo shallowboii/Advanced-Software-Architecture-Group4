@@ -55,5 +55,7 @@ typedef enum {
 tank_result_t tank_shared_init(tank_shared_t *shared);
 tank_result_t tank_init(tank_t *tank, tank_shared_t *shared, int tank_idx);
 tank_result_t tank_start(tank_t *tank, uint64_t now_seconds);
+tank_result_t tank_stop(tank_t *tank);
+tank_result_t tank_flush(tank_t *tank);
 tank_result_t tank_update(tank_t *tank, uint64_t now_seconds);
 bool tank_any_almost_done(const tank_shared_t *shared);

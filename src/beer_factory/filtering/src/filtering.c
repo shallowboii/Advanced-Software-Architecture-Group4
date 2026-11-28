@@ -25,6 +25,16 @@ filtering_result_t filtering_start(filtering_t *filtering, uint64_t now_seconds)
   return FILTERING_STARTED;
 }
 
+filtering_result_t filtering_stop(filtering_t *filtering) {
+  filtering->state = FILTERING_WAIT;
+  return FILTERING_DONE;
+}
+
+filtering_result_t filtering_flush(filtering_t *filtering) {
+  filtering->state = FILTERING_WAIT;
+  return FILTERING_DONE;
+}
+
 filtering_result_t filtering_update(filtering_t *filtering, uint64_t now_seconds) {
   if (filtering->state != FILTERING_FILTER) {
     return FILTERING_INVALID_ARGUMENT;

@@ -38,18 +38,38 @@ static void send_status(controller_t *c, kafka_type_t type) {
 
 static void on_message(const kafka_message_t *msg, void *context) {
   controller_t *c = context;
-  if (msg->machine_id != c->id || msg->type != KAFKA_START ||
-      c->boiling.state != BOILING_WAIT)
+  if (msg->machine_id != c->id)
     return;
 
-  /* The scheduler has supplied one batch of sweet wort. */
-  c->batches.sweet_wort_batches = 1;
-  if (boiling_start(&c->boiling, c->now) != BOILING_STARTED)
-    return;
-  memcpy(c->batch_id, msg->batch_id, sizeof(c->batch_id));
-  printf("Boiling started\n");
-  send_status(c, KAFKA_RUNNING);
-  /* STOP / FLUSH and start parameters are not handled, as in whirlpooling. */
+  switch (msg->type) {
+  case KAFKA_START:
+    if (c->boiling.state != BOILING_WAIT)
+      return;
+
+    /* The scheduler has supplied one batch of sweet wort. */
+    c->batches.sweet_wort_batches = 1;
+    if (boiling_start(&c->boiling, c->now) != BOILING_STARTED)
+      return;
+    memcpy(c->batch_id, msg->batch_id, sizeof(c->batch_id));
+    printf("Boiling started\n");
+    send_status(c, KAFKA_RUNNING);
+    break;
+
+  case KAFKA_STOP:
+    boiling_stop(&c->boiling);
+    printf("Boiling stopped\n");
+    send_status(c, KAFKA_IDLE);
+    break;
+
+  case KAFKA_FLUSH:
+    boiling_flush(&c->boiling);
+    printf("Boiling flushed\n");
+    send_status(c, KAFKA_IDLE);
+    break;
+
+  default:
+    break;
+  }
 }
 
 int main(int argc, char **argv) {

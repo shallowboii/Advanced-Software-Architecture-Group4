@@ -28,6 +28,16 @@ lautering_result_t lautering_start(lautering_t *lautering, uint64_t now_seconds)
   return LAUTERING_STARTED;
 }
 
+lautering_result_t lautering_stop(lautering_t *lautering) {
+  lautering->state = LAUTERING_WAIT;
+  return LAUTERING_DONE;
+}
+
+lautering_result_t lautering_flush(lautering_t *lautering) {
+  lautering->state = LAUTERING_WAIT;
+  return LAUTERING_DONE;
+}
+
 lautering_result_t lautering_update(lautering_t *lautering, uint64_t now_seconds) {
   if (lautering->state != LAUTERING_LAUTER) {
     return LAUTERING_INVALID_ARGUMENT;

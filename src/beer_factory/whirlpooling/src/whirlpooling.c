@@ -62,6 +62,16 @@ whirlpooling_result_t whirlpooling_start(whirlpooling_t *whirlpooling,
   return WHIRLPOOLING_STARTED;
 }
 
+whirlpooling_result_t whirlpooling_stop(whirlpooling_t *whirlpooling) {
+  whirlpooling->state = WHIRLPOOLING_WAIT;
+  return WHIRLPOOLING_DONE;
+}
+
+whirlpooling_result_t whirlpooling_flush(whirlpooling_t *whirlpooling) {
+  whirlpooling->state = WHIRLPOOLING_WAIT;
+  return WHIRLPOOLING_DONE;
+}
+
 whirlpooling_result_t whirlpooling_update(whirlpooling_t *whirlpooling,
                                           uint64_t now_seconds) {
   if (whirlpooling == NULL || whirlpooling->batches == NULL) {
@@ -89,30 +99,4 @@ whirlpooling_result_t whirlpooling_update(whirlpooling_t *whirlpooling,
   whirlpooling->state = WHIRLPOOLING_WAIT;
 
   return WHIRLPOOLING_DONE;
-}
-
-whirlpooling_result_t whirlpooling_stop(whirlpooling_t *whirlpooling) {
-  if (whirlpooling == NULL) {
-    return WHIRLPOOLING_INVALID_ARGUMENT;
-  }
-
-  if (whirlpooling->state != WHIRLPOOLING_WHIRLPOOL) {
-    return WHIRLPOOLING_NOT_RUNNING;
-  }
-
-  whirlpooling->state = WHIRLPOOLING_STOPPED;
-  return WHIRLPOOLING_OK;
-}
-
-whirlpooling_result_t whirlpooling_flush(whirlpooling_t *whirlpooling) {
-  if (whirlpooling == NULL) {
-    return WHIRLPOOLING_INVALID_ARGUMENT;
-  }
-
-  if (whirlpooling->state == WHIRLPOOLING_WAIT) {
-    return WHIRLPOOLING_NOT_RUNNING;
-  }
-
-  whirlpooling->state = WHIRLPOOLING_WAIT; /* the wort is discarded */
-  return WHIRLPOOLING_OK;
 }
