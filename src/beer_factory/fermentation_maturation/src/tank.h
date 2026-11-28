@@ -3,11 +3,17 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* Speed-up of the simulated clock over real time (3600: 1 s = 1 h).
+ * Durations below are simulated seconds; main.c scales the clock. */
+#ifndef TIME_DIVISOR
+#define TIME_DIVISOR 1
+#endif
+
 #define TANK_MAX_TANKS 24
 #define TANK_MAX_BATCHES 50
-#define TANK_FERMENTATION_SECONDS 120 * 3600
-#define TANK_MATURATION_SECONDS 216 * 3600
-#define TANK_TIME_LEFT_LIMIT_SECONDS 6 * 3600
+#define TANK_FERMENTATION_SECONDS (120 * 3600)
+#define TANK_MATURATION_SECONDS (216 * 3600)
+#define TANK_TIME_LEFT_LIMIT_SECONDS (6 * 3600)
 #define TANK_TOTAL_SECONDS (TANK_FERMENTATION_SECONDS + TANK_MATURATION_SECONDS)
 #define TANK_ALMOST_DONE_SECONDS                                               \
   (TANK_TOTAL_SECONDS - TANK_TIME_LEFT_LIMIT_SECONDS)

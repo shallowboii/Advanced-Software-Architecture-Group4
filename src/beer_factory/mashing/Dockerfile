@@ -14,11 +14,13 @@ WORKDIR /app
 COPY machine_commons/ machine_commons/
 ARG MACHINE
 ARG BINARY
+ARG TIME_DIVISOR=1
 COPY ${MACHINE}/ ${MACHINE}/
 WORKDIR /app/${MACHINE}
 
-RUN make test \
- && make all MQTT_C_DIR=/mqtt-c \
+RUN echo "Building with TIME_DIVISOR=${TIME_DIVISOR}" \
+ && make test TIME_DIVISOR=1 \
+ && make all MQTT_C_DIR=/mqtt-c TIME_DIVISOR=${TIME_DIVISOR} \
  && cp build/${BINARY} /machine
 
 FROM debian:bookworm-slim

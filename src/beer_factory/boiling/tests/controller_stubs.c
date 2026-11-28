@@ -136,9 +136,9 @@ int test_clock_gettime(clockid_t clock_id, struct timespec *value) {
   return 0;
 }
 
-unsigned int test_sleep(unsigned int seconds) {
-  if (seconds != 1)
-    abort();
+int test_nanosleep(const struct timespec *request, struct timespec *remaining) {
+  (void)request;
+  (void)remaining;
   if (++tick == sizeof(ticks) / sizeof(ticks[0]))
     exit(EXIT_SUCCESS); /* End the otherwise infinite controller loop. */
   return 0;
