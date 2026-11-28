@@ -56,11 +56,13 @@ static void on_message(const kafka_message_t *msg, void *context) {
 
   case KAFKA_STOP:
     filtering_stop(&c->filtering);
+    printf("Filtering stopped\n");
     send_status(c, KAFKA_IDLE);
     break;
 
   case KAFKA_FLUSH:
     filtering_flush(&c->filtering);
+    printf("Filtering flushed\n");
     send_status(c, KAFKA_IDLE);
     break;
 

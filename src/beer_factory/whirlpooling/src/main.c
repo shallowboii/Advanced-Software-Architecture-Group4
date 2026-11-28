@@ -50,11 +50,13 @@ static void on_message(const kafka_message_t *msg, void *context) {
 
   case KAFKA_STOP:
     whirlpooling_stop(&c->whirlpooling);
+    printf("Whirlpooling stopped\n");
     send_status(c, KAFKA_IDLE);
     break;
 
   case KAFKA_FLUSH:
     whirlpooling_flush(&c->whirlpooling);
+    printf("Whirlpooling flushed\n");
     send_status(c, KAFKA_IDLE);
     break;
 

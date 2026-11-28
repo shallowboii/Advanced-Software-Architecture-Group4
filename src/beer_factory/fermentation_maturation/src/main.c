@@ -52,11 +52,13 @@ static void on_message(const kafka_message_t *msg, void *context) {
 
   case KAFKA_STOP:
     tank_stop(&c->tank);
+    printf("Fermentation stopped\n");
     send_status(c, KAFKA_IDLE);
     break;
 
   case KAFKA_FLUSH:
     tank_flush(&c->tank);
+    printf("Fermentation flushed\n");
     send_status(c, KAFKA_IDLE);
     break;
 

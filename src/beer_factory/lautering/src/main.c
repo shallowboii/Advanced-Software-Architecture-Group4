@@ -49,11 +49,13 @@ static void on_message(const kafka_message_t *msg, void *context) {
 
   case KAFKA_STOP:
     lautering_stop(&c->lautering);
+    printf("Lautering stopped\n");
     send_status(c, KAFKA_IDLE);
     break;
 
   case KAFKA_FLUSH:
     lautering_flush(&c->lautering);
+    printf("Lautering flushed\n");
     send_status(c, KAFKA_IDLE);
     break;
 

@@ -54,11 +54,13 @@ static void on_message(const kafka_message_t *msg, void *context) {
 
   case KAFKA_STOP:
     mashing_stop(&c->mashing);
+    printf("Mashing stopped\n");
     send_status(c, KAFKA_IDLE);
     break;
 
   case KAFKA_FLUSH:
     mashing_flush(&c->mashing);
+    printf("Mashing flushed\n");
     send_status(c, KAFKA_IDLE);
     break;
 

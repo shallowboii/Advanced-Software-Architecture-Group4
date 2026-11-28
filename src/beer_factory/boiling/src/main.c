@@ -57,11 +57,13 @@ static void on_message(const kafka_message_t *msg, void *context) {
 
   case KAFKA_STOP:
     boiling_stop(&c->boiling);
+    printf("Boiling stopped\n");
     send_status(c, KAFKA_IDLE);
     break;
 
   case KAFKA_FLUSH:
     boiling_flush(&c->boiling);
+    printf("Boiling flushed\n");
     send_status(c, KAFKA_IDLE);
     break;
 
